@@ -27,7 +27,6 @@ export interface RouteController {
 export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTraverser: Traverser, root: HTMLElement): RouteController {
   // ------------------------------------------------------------ DOM
   const hint = root.querySelector<HTMLElement>('#route-hint')!;
-  const traverserLabel = root.querySelector<HTMLElement>('#route-traverser')!;
   const message = root.querySelector<HTMLElement>('#route-message')!;
   const summary = root.querySelector<HTMLElement>('#route-summary')!;
   const undoButton = root.querySelector<HTMLButtonElement>('#route-undo')!;
@@ -225,17 +224,13 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
     requestRoute();
   });
 
-  const showTraverser = (): void => {
-    traverserLabel.textContent = `Traverser: ${traverser.ad_en} (slope limit ${traverser.azami_egim_derece}°)`;
-  };
-  showTraverser();
   renderMarkers();
 
   return {
     setTraverser(next) {
       traverser = next;
       lastActionWasAdd = false;
-      showTraverser();
+      pendingNotice = '';
       requestRoute();
     },
   };

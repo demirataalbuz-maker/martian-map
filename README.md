@@ -6,7 +6,7 @@ obstacle-avoiding route planning between science stops.
 Built for the NASA Space Apps Challenge 2026, challenge *Interplanetary Survival
 Guide: Martian Map*. Static single-page web app, no backend.
 
-> **Status:** step 3 of 7 — layer panel plus A* route planning in a Web Worker
+> **Status:** step 4 of 7 — layers, A* routing in a Web Worker, traverser selector
 > (start + science stops, visited in tap order). The data in `public/veri` is **synthetic** and is
 > labelled as such in the UI.
 

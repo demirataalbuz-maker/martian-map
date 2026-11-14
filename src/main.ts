@@ -11,6 +11,7 @@ import { makeGridGeo } from './grid';
 import { initRoute } from './route';
 import { initLayerPanel } from './layers';
 import { attachScaleBar } from './scalebar';
+import { initTraverserSelector } from './traverser';
 
 setWorkerUrl(maplibreWorkerUrl);
 
@@ -70,8 +71,8 @@ async function start(): Promise<void> {
 
   map.on('load', () => {
     initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
-    // Step 4 adds the traverser selector; until then the first one in the file is used.
-    initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!);
+    const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!);
+    initTraverserSelector(mobility.traversers, document.getElementById('route-traverser')!, (t) => route.setTraverser(t));
     attachScaleBar(map, grid, document.getElementById('scalebar')!);
     showStatus('');
   });

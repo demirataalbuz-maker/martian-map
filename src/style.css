@@ -382,6 +382,66 @@ body {
   cursor: crosshair;
 }
 
+.traverser-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.traverser-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.traverser-option:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(232, 130, 74, 0.14);
+}
+
+.traverser-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.traverser-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.traverser-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.traverser-limit {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.traverser-details {
+  margin: 6px 0 10px;
+}
+
+.traverser-details summary {
+  min-height: 32px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.source {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 /* Tablet portrait / phone: panel becomes a bottom sheet under the map. */
 @media (max-width: 800px) {
   .layout {
