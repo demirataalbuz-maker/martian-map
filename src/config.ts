@@ -10,6 +10,7 @@ export const LAYERS_URL = `${DATA_DIR}/katmanlar.json`;
 export const GRID_URL = `${DATA_DIR}/maliyet/izgara.json`;
 export const SLOPE_URL = `${DATA_DIR}/maliyet/egim.bin`;
 export const HAZARD_URL = `${DATA_DIR}/maliyet/tehlike.bin`;
+export const ELEVATION_URL = `${DATA_DIR}/maliyet/yukseklik.bin`;
 export const MOBILITY_URL = `${base}mobilite_parametreleri.json`;
 
 // Display name only; update when the team fixes the study area.

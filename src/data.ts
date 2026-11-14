@@ -88,6 +88,8 @@ export interface Traverser {
   ad_en: string;
   azami_egim_derece: number;
   hiz_tablosu: SpeedEntry[];
+  /** Optional: slope from which the route counts as "close to the limit". */
+  uyari_egim_derece?: number;
   azami_engel_m?: number;
   azami_sure_saat?: number;
   enerji_katsayisi?: number;

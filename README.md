@@ -6,7 +6,7 @@ obstacle-avoiding route planning between science stops.
 Built for the NASA Space Apps Challenge 2026, challenge *Interplanetary Survival
 Guide: Martian Map*. Static single-page web app, no backend.
 
-> **Status:** step 4 of 7 — layers, A* routing in a Web Worker, traverser selector
+> **Status:** step 5 of 7 — layers, routing, traverser selector, result panel with profiles
 > (start + science stops, visited in tap order). The data in `public/veri` is **synthetic** and is
 > labelled as such in the UI.
 
@@ -51,6 +51,14 @@ Assumptions the code makes, **to be confirmed with the data owners**:
 - "No data" (255) and "forbidden" (2) are different things and are shown differently.
 - No Earth basemap tiles. Layers are placed as images by their four corners.
 - Raw mission data is not stored in this repository.
+
+## Result panel and warnings
+
+- Totals: distance, estimated one-way time, steepest slope, climb / descent, per-leg figures.
+- Elevation and slope profiles are plain SVG drawn by the app (no chart library).
+- Warnings: estimated time above `azami_sure_saat`; slope close to the limit; crossing "no data"; crossing "caution".
+- "Close to the limit" uses the optional `uyari_egim_derece` field of a traverser; without it, the highest speed-table breakpoint below the limit is used.
+- Without `maliyet/yukseklik.bin` the app still works and says the elevation profile is unavailable.
 
 ## Use of AI
 

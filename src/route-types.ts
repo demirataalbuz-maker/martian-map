@@ -9,7 +9,7 @@ export interface RouterTraverser {
 }
 
 export type ToWorker =
-  | { type: 'init'; slopeUrl: string; hazardUrl: string; width: number; height: number; cellM: number }
+  | { type: 'init'; slopeUrl: string; hazardUrl: string; elevationUrl: string; width: number; height: number; cellM: number }
   | { type: 'route'; id: number; waypoints: number[]; traverser: RouterTraverser };
 
 export type BlockReason = 'forbidden' | 'too-steep';
@@ -32,6 +32,12 @@ export interface RouteSuccess {
   noDataCells: number;
   /** Cells on the path classed "caution". */
   cautionCells: number;
+  /** Per path cell: distance from the start in metres (grid-based). */
+  profileDist: Float32Array;
+  /** Per path cell: slope in degrees, NaN where there is no data. */
+  profileSlope: Float32Array;
+  /** Per path cell: elevation in metres, NaN where there is no data; null when no elevation grid exists. */
+  profileElev: Float32Array | null;
 }
 
 export type RouteFailure =
@@ -39,7 +45,7 @@ export type RouteFailure =
   | { type: 'route-result'; id: number; ok: false; reason: 'no-route'; legIndex: number };
 
 export type FromWorker =
-  | { type: 'ready'; noDataCells: number; totalCells: number }
+  | { type: 'ready'; noDataCells: number; totalCells: number; hasElevation: boolean }
   | { type: 'init-error'; message: string }
   | RouteSuccess
   | RouteFailure;

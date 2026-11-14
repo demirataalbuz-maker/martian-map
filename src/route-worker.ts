@@ -27,6 +27,8 @@ let height = 0;
 let cellM = 0;
 let slope: Float32Array | null = null;
 let hazard: Uint8Array | null = null;
+/** Optional (proposed) elevation grid; the app works without it, minus the elevation profile. */
+let elevation: Float32Array | null = null;
 
 // Per-traverser cache
 let speedKey = '';
@@ -61,9 +63,16 @@ async function init(msg: Extract<ToWorker, { type: 'init' }>): Promise<void> {
   gScore = new Float64Array(cells);
   cameFrom = new Int32Array(cells);
   closed = new Uint8Array(cells);
+  try {
+    const elevBuf = await fetchBinary(msg.elevationUrl);
+    // A static host may answer a missing file with an HTML page, so the size is the real test.
+    elevation = elevBuf.byteLength === cells * 4 ? new Float32Array(elevBuf) : null;
+  } catch {
+    elevation = null;
+  }
   let noData = 0;
   for (let i = 0; i < cells; i++) if (isNoData(i)) noData++;
-  post({ type: 'ready', noDataCells: noData, totalCells: cells });
+  post({ type: 'ready', noDataCells: noData, totalCells: cells, hasElevation: elevation !== null });
 }
 
 function isNoData(i: number): boolean {
@@ -259,6 +268,26 @@ function route(msg: Extract<ToWorker, { type: 'route' }>): void {
     else if (hazard[cell] === HAZARD_CAUTION) cautionCells++;
   }
   const path = Int32Array.from(full);
+  const profileDist = new Float32Array(full.length);
+  const profileSlope = new Float32Array(full.length);
+  const profileElev = elevation ? new Float32Array(full.length) : null;
+  const diagonal = cellM * Math.SQRT2;
+  let along = 0;
+  for (let k = 0; k < full.length; k++) {
+    const cell = full[k];
+    if (k > 0) {
+      const prev = full[k - 1];
+      const isDiagonal = prev % width !== cell % width && Math.floor(prev / width) !== Math.floor(cell / width);
+      along += isDiagonal ? diagonal : cellM;
+    }
+    profileDist[k] = along;
+    const s = slope[cell];
+    profileSlope[k] = s === SLOPE_NODATA ? NaN : s;
+    if (profileElev && elevation) {
+      const z = elevation[cell];
+      profileElev[k] = z === SLOPE_NODATA ? NaN : z;
+    }
+  }
   post(
     {
       type: 'route-result',
@@ -270,8 +299,11 @@ function route(msg: Extract<ToWorker, { type: 'route' }>): void {
       time_s: legs.reduce((sum, l) => sum + l.time_s, 0),
       noDataCells,
       cautionCells,
+      profileDist,
+      profileSlope,
+      profileElev,
     },
-    [path.buffer],
+    [path.buffer, profileDist.buffer, profileSlope.buffer, ...(profileElev ? [profileElev.buffer] : [])],
   );
 }
 

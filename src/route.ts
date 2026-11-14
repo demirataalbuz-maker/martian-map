@@ -4,19 +4,13 @@
 // in the order tapped); the Web Worker returns the least-time path.
 
 import { Marker, type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from 'maplibre-gl';
-import { SLOPE_URL, HAZARD_URL } from './config';
+import { ELEVATION_URL, HAZARD_URL, SLOPE_URL } from './config';
 import type { GridMeta, Traverser } from './data';
 import type { GridGeo } from './grid';
+import { renderResults } from './results';
 import type { FromWorker, RouteSuccess, RouterTraverser, ToWorker } from './route-types';
 
 const ROUTE_SOURCE = 'route';
-
-function formatDuration(seconds: number): string {
-  const totalMinutes = Math.round(seconds / 60);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return h > 0 ? `${h} h ${m} min` : `${m} min`;
-}
 
 const absoluteUrl = (url: string): string => new URL(url, document.baseURI).href;
 
@@ -28,7 +22,7 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
   // ------------------------------------------------------------ DOM
   const hint = root.querySelector<HTMLElement>('#route-hint')!;
   const message = root.querySelector<HTMLElement>('#route-message')!;
-  const summary = root.querySelector<HTMLElement>('#route-summary')!;
+  const results = root.querySelector<HTMLElement>('#route-results')!;
   const undoButton = root.querySelector<HTMLButtonElement>('#route-undo')!;
   const clearButton = root.querySelector<HTMLButtonElement>('#route-clear')!;
 
@@ -91,22 +85,7 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
         : 'Tap the map to add a science stop. Stops are visited in the order you add them.';
   };
 
-  const renderSummary = (result: RouteSuccess | null): void => {
-    summary.replaceChildren();
-    summary.hidden = !result || result.legs.length === 0;
-    if (!result || result.legs.length === 0) return;
-    const rows: [string, string][] = [
-      ['Distance', `${Math.round(result.distance_m)} m`],
-      ['Estimated time', formatDuration(result.time_s)],
-    ];
-    for (const [term, value] of rows) {
-      const dt = document.createElement('dt');
-      dt.textContent = term;
-      const dd = document.createElement('dd');
-      dd.textContent = value;
-      summary.append(dt, dd);
-    }
-  };
+  const renderSummary = (result: RouteSuccess | null): void => renderResults(results, result, traverser, grid.hucre_m);
 
   // ------------------------------------------------------------ worker
   const worker = new Worker(new URL('./route-worker.ts', import.meta.url), { type: 'module' });
@@ -147,13 +126,8 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
     if (msg.ok) {
       setLine(msg.path);
       renderSummary(msg);
-      const warnings: string[] = [];
-      if (msg.noDataCells > 0) {
-        warnings.push(`The route crosses ${msg.noDataCells} cell(s) with NO DATA (${Math.round(msg.noDataCells * grid.hucre_m)} m or more). Terrain there is unknown.`);
-      }
-      if (msg.cautionCells > 0) warnings.push(`The route crosses ${msg.cautionCells} caution cell(s).`);
       if (pendingNotice) showMessage(pendingNotice, 'error');
-      else showMessage(warnings.join(' '), warnings.length > 0 ? 'warn' : 'info');
+      else showMessage('');
       pendingNotice = '';
       return;
     }
@@ -192,6 +166,7 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
     type: 'init',
     slopeUrl: absoluteUrl(SLOPE_URL),
     hazardUrl: absoluteUrl(HAZARD_URL),
+    elevationUrl: absoluteUrl(ELEVATION_URL),
     width: grid.genislik,
     height: grid.yukseklik,
     cellM: grid.hucre_m,
