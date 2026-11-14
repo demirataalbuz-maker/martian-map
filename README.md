@@ -80,9 +80,10 @@ Key contract details:
 
 Code in this repository was written with the assistance of AI coding assistants
 (Claude by Anthropic, and Antigravity by Google DeepMind) and reviewed by the
-team. Each source file says so in its header. The synthetic placeholder images
-are produced procedurally by `scripts/make-fake-data.mjs`, not by an
-image-generation model.
+team; each source file says so in its header. Mobility parameter literature
+research and engineering documentation also used Claude (Anthropic) and Gemini
+(Google). The synthetic placeholder images are produced procedurally by
+`scripts/make-fake-data.mjs`, not by an image-generation model.
 
 ## License and references
 

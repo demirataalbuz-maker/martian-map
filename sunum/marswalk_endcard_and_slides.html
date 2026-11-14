@@ -1,7 +1,7 @@
 <!doctype html>
 <!-- AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team. -->
 <!-- Pure HTML/CSS/SVG presentation & 27-30s video end card (zero AI-generated imagery, zero NASA/USGS logos). -->
-<!-- DRAFT NOTE: Update #endcard-data-credit, Slide 4 (Data & Sources), and Slide 7 (AI tools) once final GIS products & Çağatay's tool list are locked. -->
+<!-- DRAFT NOTE: Update #endcard-data-credit and Slide 4 (Data & Sources) once final GIS products and citations are locked. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -394,10 +394,10 @@
             </ul>
           </div>
           <div class="card">
-            <h3>Life-Support &amp; Walk-Back</h3>
+            <h3>Life-Support, Walk-Back &amp; Cap</h3>
             <ul>
-              <li>Human EVAs have hard consumable caps (<code>azami_sure_saat</code>) including science work time at stops.</li>
-              <li>Crewed rovers are bounded by the <em>walk-back survival rule</em> if the vehicle fails at the farthest stop.</li>
+              <li>Human EVAs enforce a <code>6.4 h</code> operational cap (<code>8 h × 0.80</code>) including science work time, plus a <code>10 km</code> radial standoff cap from base.</li>
+              <li>Crewed rovers check the Apollo <em>walk-back survival rule</em> (<code>elapsed + walk-back ≤ 6.4 h</code>) at every step along the route.</li>
             </ul>
           </div>
         </div>
@@ -411,23 +411,23 @@
       <section class="slide">
         <div>
           <span class="slide-tag">Slide 3 / 7 · Target-First Workflow &amp; Three Traversers</span>
-          <h2>One Mission, Three Traversers, Real Return-Leg Verification</h2>
+          <h2>One Mission, Three Traversers, Real Return-Leg &amp; GO/NO-GO Checks</h2>
         </div>
         <div class="grid-2">
           <div class="card">
             <h3>Mission Capabilities</h3>
             <ul>
               <li><strong>Candidate Landing + Backups:</strong> Prioritizes class-0 suitable candidates within range; falls back to class-1 marginal candidates only with an explicit warning.</li>
-              <li><strong>True Round-Trip Check:</strong> Computes the actual A* return path from the last stop to landing/start and places a <code>!</code> turn-around marker where budget runs out.</li>
+              <li><strong>Round-Trip &amp; Safety Envelopes:</strong> Enabled by default; flags any <code>time</code> or <code>10 km</code> <code>distance</code> violation in dashed red with <code>!</code> markers, outputs a <code>GO / CAUTION / NO-GO</code> badge, and summarizes post-hoc demo vehicle energy (<code>Wh</code>).</li>
               <li><strong>Resilient UX:</strong> Clicking an unreachable target preserves the active route and reports why even when the side panel is collapsed.</li>
             </ul>
           </div>
           <div class="card">
             <h3>Side-by-Side Traverser Comparison</h3>
             <ul>
-              <li><strong>Walking Astronaut (suited):</strong> High maneuverability on moderate slopes, strict EVA life-support duration limit.</li>
-              <li><strong>Crewed Rover:</strong> Fast flat-ground transit, tighter slope ceiling, range capped by walk-back safety.</li>
-              <li><strong>Uncrewed Rover:</strong> Robotic exploration without human consumable time limits; click any row to switch instantly.</li>
+              <li><strong>Walking Astronaut (suited):</strong> Conservative uphill walking curve up to <code>15°</code>, bounded by <code>6.4 h</code> EVA time and <code>10 km</code> base standoff.</li>
+              <li><strong>Crewed Rover:</strong> Fast transit up to <code>15°</code>, simultaneously constrained by suit walk-back safety and the <code>10 km</code> radial cap.</li>
+              <li><strong>Uncrewed Rover:</strong> Robotic scout scenario profile without human consumable caps; click any row to switch instantly.</li>
             </ul>
           </div>
         </div>
@@ -461,7 +461,7 @@
             </tr>
             <tr>
               <td><strong>USGS MRO CTX DEM (20 m/px)</strong></td>
-              <td><code>4300 × 5375</code> elevation (<code>yukseklik.bin</code>), ceiling-quantized 20 m slope (<code>egim.bin</code>), and terrain inputs to <code>tehlike.bin</code> / <code>inis.bin</code>.</td>
+              <td><code>4303 × 5376</code> elevation (<code>yukseklik.bin</code>), ceiling-quantized 20 m slope (<code>egim.bin</code>), and terrain inputs to <code>tehlike.bin</code> / <code>inis.bin</code>.</td>
               <td><strong>[TBD on GIS lock]</strong> — USGS Astrogeology CTX DTM product(s) or Mars 2020 TRN CTX DTM Mosaic.</td>
               <td>U.S. Public Domain (<code>CC0 1.0</code>)</td>
             </tr>
@@ -509,7 +509,7 @@
             <h3>"No Data" ≠ "Forbidden"</h3>
             <ul>
               <li>Unmapped cells (<code>255</code>) are hatched in legends, grey-shaded in profiles, and <strong>blocked by default</strong> so astronauts never enter unmapped ground unprompted.</li>
-              <li>Every parameter displays its engineering source &amp; confidence tag (<code>measured</code>, <code>scaled</code>, <code>ASSUMPTION</code>).</li>
+              <li>Every parameter displays its engineering source &amp; confidence tag (<code>design value</code> or <code>ASSUMPTION</code> — zero unverified "measured" tags).</li>
             </ul>
           </div>
           <div class="card">
@@ -563,17 +563,17 @@
         </div>
         <div class="grid-2">
           <div class="card">
-            <h3>Documented Physical Limitations</h3>
+            <h3>Documented Model Boundaries</h3>
             <ul>
-              <li><strong>Undirected Slope Speed:</strong> <em>Speed depends on slope magnitude only; uphill and downhill are treated the same.</em> Directional grade energetics and illumination/thermal shadow routing are next steps.</li>
-              <li><strong>20 m Grid &amp; No Rock Layer:</strong> Slopes are ceiling-quantized over <code>egim_taban_uzunlugu_m</code>; meter-scale rock abundance is not modeled in the 20 m grid, so candidate landing sites require human verification on high-resolution imagery.</li>
+              <li><strong>20 m Scale &amp; Assumed Layers:</strong> <em>Computed with 20 m resolution data; obstacles smaller than this scale were not evaluated.</em> Because rock abundance &amp; thermal inertia grids are absent, clean routes report <code>CAUTION: rock and thermal inertia data not available (assumed)</code>.</li>
+              <li><strong>Search Scope:</strong> Undirected slope-magnitude search (conservative uphill walk-back speeds), user-selected stop order (no TSP reordering), no turn penalty, and post-hoc demo vehicle energy (<code>Wh</code>).</li>
             </ul>
           </div>
           <div class="card">
             <h3>Open Source &amp; AI Disclosure</h3>
             <ul>
               <li><strong>License:</strong> Apache-2.0 (<code>github.com/demirataalbuz-maker/martian-map</code>). Shipped runtime library: MapLibre GL JS 6.18 (<code>BSD-3-Clause</code>).</li>
-              <li><strong>Use of AI (DRAFT):</strong> Code, tests, and presentation drafts used Claude (Anthropic) and Antigravity (Google DeepMind) <em>[+ add Çağatay's AI tools once confirmed]</em>, reviewed by the team. Zero AI-generated imagery is used as Mars data.</li>
+              <li><strong>Use of AI:</strong> Application code, tests, and presentation drafts used Claude (Anthropic) and Antigravity (Google DeepMind); mobility parameter &amp; algorithm research used Claude (Anthropic) and Gemini (Google), all reviewed by the team. Zero AI-generated imagery is used as Mars data.</li>
             </ul>
           </div>
         </div>

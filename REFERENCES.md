@@ -26,5 +26,6 @@ Every library, tool and data source used by this project.
 
 | Tool | Used for |
 | --- | --- |
-| Claude (Anthropic), via Claude Code | Writing and reviewing application code, presentation drafts, and the synthetic data generator |
+| Claude (Anthropic) | Writing and reviewing application code, mobility parameter & algorithm research, presentation drafts, and the synthetic data generator |
 | Antigravity (Google DeepMind) | Writing, auditing, and testing application code, performance optimizations, and presentation drafts |
+| Gemini (Google) | Mobility parameter literature research and engineering documentation |
