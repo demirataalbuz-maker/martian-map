@@ -12,15 +12,22 @@
       <span id="site-name" class="site"></span>
       <span id="synthetic-badge" class="badge" hidden>SYNTHETIC DATA — not real Mars data</span>
     </header>
+    <div class="layout">
     <main class="stage">
       <div id="map" aria-label="Layered map of the traverse area"></div>
       <div id="scalebar" class="scalebar" aria-live="off">
         <div class="scalebar-line"></div>
         <span class="scalebar-label"></span>
       </div>
-      <aside id="layer-card" class="card" hidden></aside>
       <div id="status" class="status" role="status"></div>
     </main>
+    <aside class="panel" id="panel">
+      <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="panel-body">Layers</button>
+      <div id="panel-body" class="panel-body">
+        <div id="layer-list"></div>
+      </div>
+    </aside>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

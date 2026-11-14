@@ -6,7 +6,8 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { SITE_NAME } from './config';
-import { layerImageUrl, loadGridMeta, loadLayerCatalog, type Corners, type LayerDef } from './data';
+import { loadGridMeta, loadLayerCatalog, type Corners } from './data';
+import { initLayerPanel } from './layers';
 import { attachScaleBar } from './scalebar';
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -25,37 +26,23 @@ function boundsOf(corners: Corners): LngLatBounds {
   return bounds;
 }
 
-function renderLayerCard(layer: LayerDef): void {
-  const card = document.getElementById('layer-card')!;
-  card.replaceChildren();
-  const title = document.createElement('h2');
-  title.textContent = layer.ad_en;
-  const facts = document.createElement('dl');
-  const rows: [string, string][] = [
-    ['Source', layer.kaynak],
-    ['Resolution', `${layer.cozunurluk_m} m / pixel`],
-    ['Confidence', layer.guven_notu_en],
-  ];
-  for (const [term, value] of rows) {
-    const dt = document.createElement('dt');
-    dt.textContent = term;
-    const dd = document.createElement('dd');
-    dd.textContent = value;
-    facts.append(dt, dd);
-  }
-  card.append(title, facts);
-  card.hidden = false;
+function initPanelToggle(): void {
+  const panel = document.getElementById('panel')!;
+  const button = document.getElementById('panel-toggle')!;
+  button.addEventListener('click', () => {
+    const collapsed = panel.classList.toggle('collapsed');
+    button.setAttribute('aria-expanded', String(!collapsed));
+  });
 }
 
 async function start(): Promise<void> {
+  initPanelToggle();
   showStatus('Loading map data…');
   document.getElementById('site-name')!.textContent = SITE_NAME;
 
   const [catalog, grid] = await Promise.all([loadLayerCatalog(), loadGridMeta()]);
   document.getElementById('synthetic-badge')!.hidden = !catalog.synthetic;
 
-  // Step 1: a single layer. The layer panel (step 2) will drive all of them.
-  const layer = catalog.layers[0];
   const bounds = boundsOf(grid.koseler);
 
   const map = new MlMap({
@@ -79,9 +66,7 @@ async function start(): Promise<void> {
   map.keyboard.disableRotation();
 
   map.on('load', () => {
-    map.addSource(layer.id, { type: 'image', url: layerImageUrl(layer), coordinates: layer.koseler });
-    map.addLayer({ id: layer.id, type: 'raster', source: layer.id, paint: { 'raster-fade-duration': 0 } });
-    renderLayerCard(layer);
+    initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
     attachScaleBar(map, grid, document.getElementById('scalebar')!);
     showStatus('');
   });

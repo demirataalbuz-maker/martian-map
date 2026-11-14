@@ -61,9 +61,16 @@ body {
   letter-spacing: 0.04em;
 }
 
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .stage {
   position: relative;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -93,38 +100,6 @@ body {
   border-top: 0;
 }
 
-.card {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: min(300px, calc(100% - 24px));
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  font-size: 0.85rem;
-}
-
-.card h2 {
-  margin: 0 0 6px;
-  font-size: 0.95rem;
-}
-
-.card dl {
-  margin: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 3px 10px;
-}
-
-.card dt {
-  color: var(--muted);
-}
-
-.card dd {
-  margin: 0;
-}
-
 .status {
   position: absolute;
   left: 50%;
@@ -143,7 +118,173 @@ body {
 }
 
 .status[hidden],
-.card[hidden],
 .badge[hidden] {
   display: none;
+}
+
+/* ---------- side panel ---------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 0.85rem;
+}
+
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.panel-toggle::after {
+  content: '▾';
+  color: var(--muted);
+}
+
+.panel.collapsed .panel-toggle::after {
+  content: '▸';
+}
+
+.panel-toggle:focus-visible,
+.layer input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 14px 14px;
+}
+
+.panel.collapsed {
+  width: auto;
+}
+
+.panel.collapsed .panel-body {
+  display: none;
+}
+
+.layer {
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.layer:last-child {
+  border-bottom: 0;
+}
+
+.layer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.layer-head input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.layer-opacity {
+  display: grid;
+  grid-template-columns: auto 1fr 3.2em;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  color: var(--muted);
+}
+
+.layer-opacity input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.layer-opacity output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.layer.off .layer-opacity,
+.layer.off .legend {
+  opacity: 0.45;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
+}
+
+/* 'No data' is drawn as a hatch so it can never be mistaken for a class colour. */
+.swatch.nodata {
+  background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(255, 255, 255, 0.45) 3px 4px);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* Tablet portrait / phone: panel becomes a bottom sheet under the map. */
+@media (max-width: 800px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .panel {
+    width: auto;
+    max-height: 45%;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .panel.collapsed {
+    width: auto;
+  }
 }

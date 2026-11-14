@@ -6,8 +6,8 @@ obstacle-avoiding route planning between science stops.
 Built for the NASA Space Apps Challenge 2026, challenge *Interplanetary Survival
 Guide: Martian Map*. Static single-page web app, no backend.
 
-> **Status:** step 1 of 7 — repository skeleton, synthetic data generator, one
-> layer on the map. The data currently in `public/veri` is **synthetic** and is
+> **Status:** step 2 of 7 — synthetic data generator, map, and a layer panel
+> built from `katmanlar.json`. The data in `public/veri` is **synthetic** and is
 > labelled as such in the UI.
 
 ## Run it
