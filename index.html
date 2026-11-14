@@ -22,8 +22,20 @@
       <div id="status" class="status" role="status"></div>
     </main>
     <aside class="panel" id="panel">
-      <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="panel-body">Layers</button>
+      <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="panel-body">Route &amp; layers</button>
       <div id="panel-body" class="panel-body">
+        <section id="route-panel" class="route">
+          <h2>Route</h2>
+          <p id="route-traverser" class="route-traverser"></p>
+          <p id="route-hint" class="route-hint"></p>
+          <div class="route-actions">
+            <button id="route-undo" type="button" disabled>Undo last point</button>
+            <button id="route-clear" type="button" disabled>Clear route</button>
+          </div>
+          <dl id="route-summary" class="route-summary" hidden></dl>
+          <p id="route-message" class="route-message" role="status" hidden></p>
+        </section>
+        <h2>Layers</h2>
         <div id="layer-list"></div>
       </div>
     </aside>

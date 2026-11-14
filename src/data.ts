@@ -1,7 +1,7 @@
 // AI-assisted code: written with Claude (Anthropic), reviewed by the team.
 // Loaders and types for the team's data contract (field names are Turkish by agreement).
 
-import { DATA_DIR, GRID_URL, LAYERS_URL } from './config';
+import { DATA_DIR, GRID_URL, LAYERS_URL, MOBILITY_URL } from './config';
 
 export type LonLat = [number, number];
 /** Corner order: top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW). */
@@ -75,3 +75,50 @@ export async function loadGridMeta(): Promise<GridMeta> {
 }
 
 export const layerImageUrl = (layer: LayerDef): string => `${DATA_DIR}/${layer.dosya}`;
+
+// ------------------------------------------------------------ mobility parameters
+
+export interface SpeedEntry {
+  egim_derece: number;
+  hiz_m_s: number;
+}
+
+export interface Traverser {
+  id: string;
+  ad_en: string;
+  azami_egim_derece: number;
+  hiz_tablosu: SpeedEntry[];
+  azami_engel_m?: number;
+  azami_sure_saat?: number;
+  enerji_katsayisi?: number;
+  kaynaklar?: Record<string, string>;
+}
+
+export interface MobilityParams {
+  synthetic: boolean;
+  traversers: Traverser[];
+}
+
+const isPositive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
+
+/** Every limit and speed used by the app comes from this file; nothing is hard-coded. */
+export async function loadMobility(): Promise<MobilityParams> {
+  const raw = (await fetchJson(MOBILITY_URL)) as { sahte?: boolean; gezginler?: unknown };
+  if (!Array.isArray(raw.gezginler) || raw.gezginler.length === 0) {
+    throw new Error('mobilite_parametreleri.json contains no traversers ("gezginler")');
+  }
+  const traversers = raw.gezginler as Traverser[];
+  for (const t of traversers) {
+    const where = `mobilite_parametreleri.json, traverser "${t.id ?? '?'}"`;
+    if (!t.id || !t.ad_en) throw new Error(`${where}: "id" and "ad_en" are required`);
+    if (!isPositive(t.azami_egim_derece)) throw new Error(`${where}: "azami_egim_derece" must be a positive number`);
+    if (!Array.isArray(t.hiz_tablosu) || t.hiz_tablosu.length === 0) throw new Error(`${where}: "hiz_tablosu" is empty`);
+    for (const entry of t.hiz_tablosu) {
+      if (typeof entry.egim_derece !== 'number' || !isPositive(entry.hiz_m_s)) {
+        throw new Error(`${where}: every "hiz_tablosu" entry needs "egim_derece" and a positive "hiz_m_s"`);
+      }
+    }
+    t.hiz_tablosu = [...t.hiz_tablosu].sort((a, b) => a.egim_derece - b.egim_derece);
+  }
+  return { synthetic: raw.sahte === true, traversers };
+}

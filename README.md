@@ -6,8 +6,8 @@ obstacle-avoiding route planning between science stops.
 Built for the NASA Space Apps Challenge 2026, challenge *Interplanetary Survival
 Guide: Martian Map*. Static single-page web app, no backend.
 
-> **Status:** step 2 of 7 — synthetic data generator, map, and a layer panel
-> built from `katmanlar.json`. The data in `public/veri` is **synthetic** and is
+> **Status:** step 3 of 7 — layer panel plus A* route planning in a Web Worker
+> (start + science stops, visited in tap order). The data in `public/veri` is **synthetic** and is
 > labelled as such in the UI.
 
 ## Run it
@@ -63,3 +63,13 @@ in its header. The synthetic placeholder images are produced procedurally by
 
 Apache License 2.0 — see [LICENSE](LICENSE). Third-party libraries and data
 sources are listed in [REFERENCES.md](REFERENCES.md).
+
+## Routing model
+
+The route is the least-**time** path on the cost grid (A*, 8-connected, in a Web
+Worker). All numbers come from the data files:
+
+- step length = `hucre_m` (orthogonal) or `hucre_m` × √2 (diagonal); step time = length / speed
+- cell speed = the traverser's speed table interpolated at the cell's slope
+- impassable = hazard class 2 (forbidden) or slope above the traverser's limit; diagonal steps never cut a blocked corner
+- **assumption to confirm with the team:** "caution" and "no data" cells are passable, but only at the slowest speed in the traverser's table, and the route panel warns when the path crosses them

@@ -109,12 +109,17 @@ const CRATERS = [
   { cx: 335, cy: 230, r: 9, depth: 6 },
 ];
 
+const RAMP_ROW = 150;
+
 const elev = new Float32Array(W * H);
 for (let y = 0; y < H; y++) {
   for (let x = 0; x < W; x++) {
     // Delta top in the west, crater floor in the east, with a wavy scarp between.
     const scarpX = 170 + (fbm(scarpNoise, y / 60, 0.5, 3) - 0.5) * 120;
-    const plateau = 1 - smoothstep(scarpX - 14, scarpX + 14, x);
+    // One gentle ramp through the scarp, so the two sides are connected by a single corridor.
+    const ramp = Math.exp(-(((y - RAMP_ROW) / 20) ** 2));
+    const halfWidth = 14 + ramp * 110;
+    const plateau = 1 - smoothstep(scarpX - halfWidth, scarpX + halfWidth, x);
     let z = -2560 + plateau * 55;
     z += (fbm(terrainNoise, x / 55, y / 55, 5) - 0.5) * 34;
     z += (fbm(terrainNoise, x / 9 + 40, y / 9 + 40, 2) - 0.5) * 2.2;

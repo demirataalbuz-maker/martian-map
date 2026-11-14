@@ -6,7 +6,9 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { SITE_NAME } from './config';
-import { loadGridMeta, loadLayerCatalog, type Corners } from './data';
+import { loadGridMeta, loadLayerCatalog, loadMobility, type Corners } from './data';
+import { makeGridGeo } from './grid';
+import { initRoute } from './route';
 import { initLayerPanel } from './layers';
 import { attachScaleBar } from './scalebar';
 
@@ -40,8 +42,9 @@ async function start(): Promise<void> {
   showStatus('Loading map data…');
   document.getElementById('site-name')!.textContent = SITE_NAME;
 
-  const [catalog, grid] = await Promise.all([loadLayerCatalog(), loadGridMeta()]);
-  document.getElementById('synthetic-badge')!.hidden = !catalog.synthetic;
+  const [catalog, grid, mobility] = await Promise.all([loadLayerCatalog(), loadGridMeta(), loadMobility()]);
+  document.getElementById('synthetic-badge')!.hidden = !(catalog.synthetic || mobility.synthetic);
+  const geo = makeGridGeo(grid);
 
   const bounds = boundsOf(grid.koseler);
 
@@ -67,6 +70,8 @@ async function start(): Promise<void> {
 
   map.on('load', () => {
     initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
+    // Step 4 adds the traverser selector; until then the first one in the file is used.
+    initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!);
     attachScaleBar(map, grid, document.getElementById('scalebar')!);
     showStatus('');
   });
