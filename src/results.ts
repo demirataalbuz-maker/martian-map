@@ -1,4 +1,4 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Result panel: totals, warnings, and elevation / slope profiles along the
 // route. Charts are plain SVG drawn here (no chart library). Every threshold
@@ -32,12 +32,14 @@ export function formatDuration(seconds: number): string {
 
 /**
  * Slope from which the route counts as "close to the limit": the optional
- * "uyari_egim_derece" field, otherwise the highest speed-table breakpoint that
- * is still below the limit. Null when the file gives nothing to derive it from.
+ * "uyari_egim_derece" field, otherwise the highest positive speed-table
+ * breakpoint still below the limit. Null when the file gives nothing usable.
  */
 export function nearLimitSlope(t: Traverser): number | null {
-  if (typeof t.uyari_egim_derece === 'number' && Number.isFinite(t.uyari_egim_derece)) return t.uyari_egim_derece;
-  const below = t.hiz_tablosu.map((entry) => entry.egim_derece).filter((deg) => deg < t.azami_egim_derece);
+  if (typeof t.uyari_egim_derece === 'number' && Number.isFinite(t.uyari_egim_derece) && t.uyari_egim_derece > 0) {
+    return t.uyari_egim_derece;
+  }
+  const below = t.hiz_tablosu.map((entry) => entry.egim_derece).filter((deg) => deg > 0 && deg < t.azami_egim_derece);
   return below.length > 0 ? Math.max(...below) : null;
 }
 
@@ -122,7 +124,13 @@ function drawChart(spec: ChartSpec): SVGSVGElement {
 
 // ------------------------------------------------------------ panel
 
-export function renderResults(root: HTMLElement, result: RouteSuccess | null, traverser: Traverser, cellM: number): void {
+export function renderResults(
+  root: HTMLElement,
+  result: RouteSuccess | null,
+  traverser: Traverser,
+  cellM: number,
+  slopeBaselineM?: number,
+): void {
   root.replaceChildren();
   root.hidden = !result || result.legs.length === 0;
   if (!result || result.legs.length === 0) return;
@@ -164,20 +172,26 @@ export function renderResults(root: HTMLElement, result: RouteSuccess | null, tr
   // Totals
   const totals = el('dl', 'route-summary');
   const limitHours = traverser.azami_sure_saat;
-  const hasLimit = typeof limitHours === 'number' && Number.isFinite(limitHours);
+  const hasLimit = typeof limitHours === 'number' && Number.isFinite(limitHours) && limitHours > 0;
+  const hasBaseline = typeof slopeBaselineM === 'number' && Number.isFinite(slopeBaselineM) && slopeBaselineM > 0;
+  const baselineSuffix = hasBaseline ? ` on ${slopeBaselineM} m baseline` : '';
   const rows: [string, string][] = [
     ['Distance', `${Math.round(result.distance_m)} m`],
     ['Estimated time', hasLimit ? `${formatDuration(result.time_s)} (limit ${limitHours} h)` : formatDuration(result.time_s)],
-    ['Steepest slope', Number.isFinite(maxSlope) ? `${maxSlope.toFixed(1)}° (limit ${traverser.azami_egim_derece}°)` : 'unknown'],
+    [
+      'Steepest slope',
+      Number.isFinite(maxSlope) ? `${maxSlope.toFixed(1)}°${baselineSuffix} (limit ${traverser.azami_egim_derece}°)` : 'unknown',
+    ],
   ];
   if (elev) rows.push(['Climb / descent', `+${Math.round(ascent)} m / −${Math.round(descent)} m`]);
   for (const [term, value] of rows) totals.append(el('dt', undefined, term), el('dd', undefined, value));
   root.append(totals);
 
-  if (result.legs.length > 1) {
+  const originLabel = result.mode === 'auto-landing' ? 'Landing' : 'Start';
+  if (result.legs.length >= 1) {
     const legs = el('ol', 'route-legs');
     result.legs.forEach((leg, index) => {
-      const from = index === 0 ? 'Start' : `Stop ${index}`;
+      const from = index === 0 ? originLabel : `Stop ${index}`;
       legs.append(el('li', undefined, `${from} → Stop ${index + 1}: ${Math.round(leg.distance_m)} m, ${formatDuration(leg.time_s)}`));
     });
     root.append(legs);
@@ -185,6 +199,11 @@ export function renderResults(root: HTMLElement, result: RouteSuccess | null, tr
 
   // Warnings
   const warnings: string[] = [];
+  if (result.marginalLanding) {
+    warnings.push(
+      'No class-0 suitable landing zone was reachable within range; using a marginal (borderline, class 1) landing zone.',
+    );
+  }
   if (hasLimit && result.time_s > limitHours * 3600) {
     warnings.push(`Estimated time ${formatDuration(result.time_s)} exceeds the ${limitHours} h maximum for "${traverser.ad_en}".`);
   }
@@ -217,14 +236,18 @@ export function renderResults(root: HTMLElement, result: RouteSuccess | null, tr
   }
   const refs = [{ y: traverser.azami_egim_derece, label: `limit ${traverser.azami_egim_derece}°`, className: 'limit' }];
   if (near !== null) refs.push({ y: near, label: `${near}°`, className: 'near' });
-  charts.append(drawChart({ title: 'Slope', unit: '°', xs, ys: slopes, total: result.distance_m, stops, gaps, refs, includeZero: true }));
+  const slopeTitle = hasBaseline ? `Slope (${slopeBaselineM} m baseline)` : 'Slope';
+  charts.append(drawChart({ title: slopeTitle, unit: '°', xs, ys: slopes, total: result.distance_m, stops, gaps, refs, includeZero: true }));
   root.append(charts);
 
+  const baselineNote = hasBaseline
+    ? `Terrain slope is ceiling-quantized over a ${slopeBaselineM} m baseline (not directional slope).`
+    : 'Slope is the terrain slope of each cell, not the slope along the direction of travel.';
   root.append(
     el(
       'p',
       'route-note',
-      'Time is one-way travel only (no time at stops, no return). Slope is the terrain slope of each cell, not the slope along the direction of travel. Grey spans in the charts have no data.',
+      `Time is one-way travel only (no time at stops, no return). ${baselineNote} Grey spans in the charts have no data.`,
     ),
   );
 }

@@ -30,22 +30,28 @@ code change is needed.
 ```
 public/
   veri/
-    katmanlar.json        layer list: id, ad_en, tur, dosya, koseler, kaynak,
-                          cozunurluk_m, guven_notu_en, lejant
-    <layer_id>.png        transparent pixel = no data
-    maliyet/izgara.json   genislik, yukseklik, hucre_m, koseler
-    maliyet/egim.bin      Float32, row by row, degrees; -9999 = no data
+    katmanlar.json        layer list: either tile layers (karolar, sema, min_zoom,
+                          max_zoom, sinir) or single-image layers (dosya, koseler),
+                          plus id, ad_en, tur, kaynak, cozunurluk_m, guven_notu_en, lejant
+    karolar/<id>/{z}/{x}/{y}.<ext>   Web Mercator XYZ / TMS raster tile pyramid
+    <layer_id>.<ext>      single 4-corner image layer; transparent pixel = no data
+    duraklar.json         optional science stops (id, ad_en, konum, aciklama_en, foto, foto_kaynak)
+    maliyet/izgara.json   genislik, yukseklik, hucre_m, koseler, plus binary encoding
+                          fields (egim_tipi, egim_olcek, egim_veri_yok, egim_taban_uzunlugu_m,
+                          yukseklik_tipi, yukseklik_taban_m, yukseklik_olcek_m, yukseklik_veri_yok)
+    maliyet/egim.bin      Uint8 ceiling-quantized slope (or Float32 fallback); 255 = no data
     maliyet/tehlike.bin   Uint8; 0 free, 1 caution, 2 forbidden, 255 = no data
-  mobilite_parametreleri.json   per-traverser limits, each number with its source
+    maliyet/inis.bin      optional Uint8; 0 suitable, 1 marginal, 2 unsuitable, 255 = no data
+    maliyet/yukseklik.bin optional Int16 little-endian (or Float32); lazy-loaded on 1st route
+  mobilite_parametreleri.json   yuruyen_insan, roverli_insan, rover & inis_araci ({ deger, kaynak, guven })
 ```
 
-Assumptions the code makes, **to be confirmed with the data owners**:
+Key contract details:
 
 - `koseler` order is top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW), each `[longitude, latitude]`.
-- Row 0 of every raster is the north edge; binaries are little-endian.
-- `katmanlar.json` is either a bare array or `{ "katmanlar": [...] }`; `lejant` is a list of `{ "renk": "#rrggbb", "etiket_en": "..." }`.
-- `veri/duraklar.json` is a **proposed addition** for science stops: `{ "duraklar": [{ "id", "ad_en", "konum": [lon, lat], "aciklama_en", "foto", "foto_kaynak" }] }`. `foto` is an image file in `veri/`; it and the file itself are optional.
-- `maliyet/yukseklik.bin` (Float32, metres, -9999 = no data) is a **proposed addition**: the elevation profile cannot be drawn from slope alone.
+- `sinir` on tile layers is `[west, south, east, north]` in `[longitude, latitude]`, passed to MapLibre `bounds` so out-of-footprint tiles are never requested.
+- Row 0 of every raster is the north edge; multi-byte binaries (`Int16`, `Float32`) are little-endian.
+- `maliyet/yukseklik.bin` is **lazy-loaded on the first route request** rather than at page startup to avoid downloading ~46 MB before a route is needed.
 
 ## Design rules
 
@@ -70,10 +76,11 @@ Assumptions the code makes, **to be confirmed with the data owners**:
 
 ## Use of AI
 
-Code in this repository was written with the assistance of an AI coding
-assistant (Claude, Anthropic) and reviewed by the team. Each source file says so
-in its header. The synthetic placeholder images are produced procedurally by
-`scripts/make-fake-data.mjs`, not by an image-generation model.
+Code in this repository was written with the assistance of AI coding assistants
+(Claude by Anthropic, and Antigravity by Google DeepMind) and reviewed by the
+team. Each source file says so in its header. The synthetic placeholder images
+are produced procedurally by `scripts/make-fake-data.mjs`, not by an
+image-generation model.
 
 ## License and references
 

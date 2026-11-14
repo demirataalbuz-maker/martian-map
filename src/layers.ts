@@ -1,10 +1,10 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Layer panel, built entirely from katmanlar.json: visibility toggle, opacity,
 // legend, and the source / resolution / confidence note of every layer.
 
 import type { Map as MlMap } from 'maplibre-gl';
-import { layerImageUrl, type LayerDef } from './data';
+import { layerImageUrl, layerTileUrl, type LayerDef } from './data';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -27,7 +27,23 @@ export function initLayerPanel(map: MlMap, layers: LayerDef[], root: HTMLElement
 
   layers.forEach((layer, index) => {
     const visible = index === 0;
-    map.addSource(layer.id, { type: 'image', url: layerImageUrl(layer), coordinates: layer.koseler });
+    if (layer.karolar) {
+      map.addSource(layer.id, {
+        type: 'raster',
+        tiles: [layerTileUrl(layer.karolar)],
+        scheme: layer.sema ?? 'xyz',
+        ...(layer.min_zoom !== undefined ? { minzoom: layer.min_zoom } : {}),
+        ...(layer.max_zoom !== undefined ? { maxzoom: layer.max_zoom } : {}),
+        ...(layer.sinir ? { bounds: layer.sinir } : {}),
+        tileSize: layer.karo_boyutu ?? 256,
+      });
+    } else {
+      map.addSource(layer.id, {
+        type: 'image',
+        url: layerImageUrl(layer),
+        coordinates: layer.koseler!,
+      });
+    }
     map.addLayer({
       id: layer.id,
       type: 'raster',
@@ -71,24 +87,39 @@ export function initLayerPanel(map: MlMap, layers: LayerDef[], root: HTMLElement
 
     // Legend
     const legend = el('ul', 'legend');
-    for (const entry of layer.lejant ?? []) {
+    const entries = layer.lejant ?? [];
+    for (const entry of entries) {
       const li = el('li');
       const swatch = el('span', 'swatch');
       swatch.style.background = entry.renk;
       li.append(swatch, el('span', undefined, entry.etiket_en));
       legend.append(li);
     }
-    const noData = el('li');
-    noData.append(el('span', 'swatch nodata'), el('span', undefined, 'No data (transparent)'));
-    legend.append(noData);
+    const assetPath = layer.karolar ?? layer.dosya ?? '';
+    const isJpeg = /\.(jpe?g)(?:$|[?#])/i.test(assetPath);
+    const alreadyHasNoData = entries.some((e) => /no\s*data/i.test(e.etiket_en));
+    if (!isJpeg && !alreadyHasNoData) {
+      const noData = el('li');
+      noData.append(el('span', 'swatch nodata'), el('span', undefined, 'No data (transparent)'));
+      legend.append(noData);
+    }
 
     // Provenance: always visible next to the layer
     const facts = el('dl', 'facts');
     const rows: [string, string][] = [
       ['Source', layer.kaynak || 'not stated'],
       ['Resolution', formatResolution(layer.cozunurluk_m)],
-      ['Confidence', layer.guven_notu_en || 'not stated'],
     ];
+    if (layer.karolar && (layer.min_zoom !== undefined || layer.max_zoom !== undefined)) {
+      const zoomLabel =
+        layer.min_zoom !== undefined && layer.max_zoom !== undefined
+          ? `z${layer.min_zoom}–z${layer.max_zoom}`
+          : layer.max_zoom !== undefined
+          ? `up to z${layer.max_zoom}`
+          : `from z${layer.min_zoom}`;
+      rows.push(['Tile pyramid', zoomLabel]);
+    }
+    rows.push(['Confidence', layer.guven_notu_en || 'not stated']);
     for (const [term, value] of rows) facts.append(el('dt', undefined, term), el('dd', undefined, value));
 
     item.append(head, opacityRow, legend, facts);

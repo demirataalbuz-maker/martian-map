@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- AI-assisted code: written with Claude (Anthropic), reviewed by the team. -->
+<!-- AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -25,8 +25,12 @@
       <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="panel-body">Route &amp; layers</button>
       <div id="panel-body" class="panel-body">
         <section id="route-panel" class="route">
-          <h2>Route</h2>
+          <h2>Route &amp; landing</h2>
           <div id="route-traverser" class="route-traverser"></div>
+          <div id="route-mode" class="route-mode" role="group" aria-label="Start mode" hidden>
+            <button id="mode-auto" type="button" class="mode-btn active">Recommend landing</button>
+            <button id="mode-manual" type="button" class="mode-btn">Manual start</button>
+          </div>
           <p id="route-hint" class="route-hint"></p>
           <div class="route-actions">
             <button id="route-undo" type="button" disabled>Undo last point</button>
@@ -36,6 +40,7 @@
             <button id="route-download" type="button" disabled>Download route (GeoJSON)</button>
           </div>
           <p id="route-message" class="route-message" role="status" hidden></p>
+          <div id="landing-candidates" class="landing-candidates" hidden></div>
           <div id="route-results" class="route-results" hidden></div>
         </section>
         <h2>Layers</h2>

@@ -4,37 +4,37 @@
   "duraklar": [
     {
       "id": "stop_a",
-      "ad_en": "Layered outcrop (synthetic)",
+      "ad_en": "Western carbonate bench (synthetic)",
       "konum": [
-        77.388461,
-        18.467565
+        77.276018,
+        18.535861
       ],
-      "aciklama_en": "Placeholder stop on the upper surface. Real description and photo to be supplied."
+      "aciklama_en": "Placeholder stop on the western highland bench within EVA reach of flat landing plains."
     },
     {
       "id": "stop_b",
-      "ad_en": "Ramp head (synthetic)",
+      "ad_en": "Valley breach crest (synthetic)",
       "konum": [
-        77.392916,
-        18.459958
+        77.347227,
+        18.495362
       ],
-      "aciklama_en": "Placeholder stop at the top of the only gentle way down the scarp."
+      "aciklama_en": "Placeholder stop at the gentle valley corridor crossing the regional scarp."
     },
     {
       "id": "stop_c",
-      "ad_en": "Boulder field (synthetic)",
+      "ad_en": "Delta fan deposit (synthetic)",
       "konum": [
-        77.405569,
-        18.458098
+        77.500327,
+        18.478488
       ],
-      "aciklama_en": "Placeholder stop on the lower plain."
+      "aciklama_en": "Placeholder stop on the lower basin floor east of the scarp."
     },
     {
       "id": "stop_d",
-      "ad_en": "Unmapped corner (synthetic)",
+      "ad_en": "Unmapped NE margin (synthetic)",
       "konum": [
-        77.41448,
-        18.470269
+        77.977429,
+        19.190588
       ],
       "aciklama_en": "Placeholder stop inside the area with no slope or hazard data, to exercise the no-data warning."
     }

@@ -1,4 +1,4 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 
 import { LngLatBounds, Map as MlMap, setWorkerUrl, type ErrorEvent } from 'maplibre-gl';
 // MapLibre 6 loads its worker from a URL; let Vite bundle it so it also works on a static host.
@@ -42,10 +42,16 @@ function initPanelToggle(): void {
 async function start(): Promise<void> {
   initPanelToggle();
   showStatus('Loading map data…');
-  document.getElementById('site-name')!.textContent = SITE_NAME;
 
-  const [catalog, grid, mobility, stops] = await Promise.all([loadLayerCatalog(), loadGridMeta(), loadMobility(), loadStops()]);
-  const synthetic = catalog.synthetic || mobility.synthetic;
+  const [catalog, grid, mobility, stopsCatalog] = await Promise.all([
+    loadLayerCatalog(),
+    loadGridMeta(),
+    loadMobility(),
+    loadStops(),
+  ]);
+
+  document.getElementById('site-name')!.textContent = catalog.siteName ?? grid.siteName ?? SITE_NAME;
+  const synthetic = catalog.synthetic || grid.synthetic || mobility.synthetic || stopsCatalog.synthetic;
   document.getElementById('synthetic-badge')!.hidden = !synthetic;
   const geo = makeGridGeo(grid);
 
@@ -72,12 +78,26 @@ async function start(): Promise<void> {
   map.keyboard.disableRotation();
 
   map.on('load', () => {
-    initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
-    const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!, { synthetic });
-    initStops(map, stops, (stop) => route.addPoint(stop.konum, stop.ad_en));
-    initTraverserSelector(mobility.traversers, document.getElementById('route-traverser')!, (t) => route.setTraverser(t));
-    attachScaleBar(map, grid, document.getElementById('scalebar')!);
-    showStatus('');
+    try {
+      initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
+      const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!, {
+        synthetic,
+        landingCraft: mobility.landingCraft,
+      });
+      initStops(map, stopsCatalog.stops, (stop) => route.addPoint(stop.konum, stop.ad_en));
+      initTraverserSelector(
+        mobility.traversers,
+        mobility.landingCraft,
+        document.getElementById('route-traverser')!,
+        (t) => route.setTraverser(t),
+        grid.egim_taban_uzunlugu_m,
+      );
+      attachScaleBar(map, grid, document.getElementById('scalebar')!);
+      showStatus('');
+    } catch (err: unknown) {
+      console.error(err);
+      showStatus(err instanceof Error ? err.message : String(err), true);
+    }
   });
   map.on('error', (e: ErrorEvent) => showStatus(`Map error: ${e.error?.message ?? 'unknown'}`, true));
 

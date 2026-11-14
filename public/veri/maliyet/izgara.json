@@ -1,24 +1,33 @@
 {
   "sahte": true,
-  "genislik": 400,
-  "yukseklik": 300,
-  "hucre_m": 5,
+  "alan_en": "Jezero & Nili Fossae region (synthetic 86 × 108 km)",
+  "genislik": 4300,
+  "yukseklik": 5375,
+  "hucre_m": 20,
   "koseler": [
     [
-      77.382179,
-      18.472678
+      76.667,
+      19.4
     ],
     [
-      77.417821,
-      18.472678
+      78.198,
+      19.4
     ],
     [
-      77.417821,
-      18.447322
+      78.198,
+      17.586
     ],
     [
-      77.382179,
-      18.447322
+      76.667,
+      17.586
     ]
-  ]
+  ],
+  "egim_tipi": "uint8",
+  "egim_olcek": 0.25,
+  "egim_veri_yok": 255,
+  "egim_taban_uzunlugu_m": 20,
+  "yukseklik_tipi": "int16",
+  "yukseklik_taban_m": 0,
+  "yukseklik_olcek_m": 0.5,
+  "yukseklik_veri_yok": -32768
 }

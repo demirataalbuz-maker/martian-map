@@ -1,57 +1,61 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Generates SYNTHETIC placeholder data in the exact file layout agreed with the
-// team, so the web app can be built before the real products arrive.
+// team, scaled to the full 86.1 x 107.5 km study box (76.667–78.198° E,
+// 17.586–19.400° N) at 20 m / cell (4300 x 5375 = 23,112,500 cells), so the web
+// app and Web Worker memory/latency can be stress-tested before real products arrive.
 // Nothing produced here is real Mars data. Every number is a placeholder.
 //
 // Usage:  node scripts/make-fake-data.mjs [outDir]     (default: public)
-// Output: <outDir>/veri/katmanlar.json
+// Output: <outDir>/veri/katmanlar.json                 (coexisting XYZ tile pyramid + 4-corner images)
+//         <outDir>/veri/karolar/terrain_shade/{z}/{x}/{y}.png
 //         <outDir>/veri/<layer_id>.png
 //         <outDir>/veri/maliyet/izgara.json
-//         <outDir>/veri/maliyet/egim.bin      Float32, row by row, degrees, -9999 = no data
-//         <outDir>/veri/maliyet/tehlike.bin   Uint8, 0 free, 1 caution, 2 forbidden, 255 = no data
-//         <outDir>/veri/maliyet/yukseklik.bin Float32, metres, -9999 = no data  (PROPOSED extension)
-//         <outDir>/veri/duraklar.json         science stops (PROPOSED extension)
+//         <outDir>/veri/maliyet/egim.bin               Uint8, ceiling-quantized (~23.1 MB)
+//         <outDir>/veri/maliyet/tehlike.bin            Uint8, 0/1/2/255 (~23.1 MB)
+//         <outDir>/veri/maliyet/inis.bin               Uint8, 0/1/2/255 (~23.1 MB)
+//         <outDir>/veri/maliyet/yukseklik.bin          Int16 little-endian (~46.2 MB)
+//         <outDir>/veri/duraklar.json                  science stops
 //         <outDir>/mobilite_parametreleri.json
 //
 // No dependencies: PNG encoding uses Node's built-in zlib.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
+const tStart = performance.now();
 const outDir = resolve(process.argv[2] ?? 'public');
 const dataDir = join(outDir, 'veri');
 const costDir = join(dataDir, 'maliyet');
 mkdirSync(costDir, { recursive: true });
+rmSync(join(dataDir, 'terrain_shade.png'), { force: true });
 
 // ---------------------------------------------------------------- grid setup
-const W = 400; // genislik (cells)
-const H = 300; // yukseklik (cells)
-const CELL_M = 5; // hucre_m
-const NODATA_F = -9999;
+// Updated study box: 76.667–78.198° E, 17.586–19.400° N (~86.1 x 107.5 km) @ 20 m
+const W = 4300; // genislik (cells)
+const H = 5375; // yukseklik (cells) -> 23,112,500 cells
+const CELLS = W * H;
+const CELL_M = 20; // hucre_m
 
-// Approximate location of the Jezero delta front. Used only to place the
-// synthetic rectangle somewhere plausible; update when the team fixes the site.
-const CENTER_LON = 77.4;
-const CENTER_LAT = 18.46;
-const MARS_MEAN_RADIUS_M = 3_389_500;
-const M_PER_DEG_LAT = (Math.PI * MARS_MEAN_RADIUS_M) / 180;
-const M_PER_DEG_LON = M_PER_DEG_LAT * Math.cos((CENTER_LAT * Math.PI) / 180);
+const BOUND_WEST = 76.667;
+const BOUND_EAST = 78.198;
+const BOUND_SOUTH = 17.586;
+const BOUND_NORTH = 19.4;
+const SINIR = [BOUND_WEST, BOUND_SOUTH, BOUND_EAST, BOUND_NORTH];
 
-const halfLon = (W * CELL_M) / 2 / M_PER_DEG_LON;
-const halfLat = (H * CELL_M) / 2 / M_PER_DEG_LAT;
-const r6 = (v) => Math.round(v * 1e6) / 1e6;
 // Corner order: top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW).
 // Row 0 of every raster is the NORTH edge.
 const CORNERS = [
-  [r6(CENTER_LON - halfLon), r6(CENTER_LAT + halfLat)],
-  [r6(CENTER_LON + halfLon), r6(CENTER_LAT + halfLat)],
-  [r6(CENTER_LON + halfLon), r6(CENTER_LAT - halfLat)],
-  [r6(CENTER_LON - halfLon), r6(CENTER_LAT - halfLat)],
+  [BOUND_WEST, BOUND_NORTH],
+  [BOUND_EAST, BOUND_NORTH],
+  [BOUND_EAST, BOUND_SOUTH],
+  [BOUND_WEST, BOUND_SOUTH],
 ];
 
-// ---------------------------------------------------------------- noise
+const r6 = (v) => Math.round(v * 1e6) / 1e6;
+
+// ---------------------------------------------------------------- fast bitwise lattice noise
 function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
@@ -63,119 +67,242 @@ function mulberry32(seed) {
   };
 }
 
-function makeValueNoise(seed, size = 64) {
+function makeFastNoise256(seed) {
   const rnd = mulberry32(seed);
-  const lattice = new Float32Array(size * size);
+  const lattice = new Float32Array(256 * 256);
   for (let i = 0; i < lattice.length; i++) lattice[i] = rnd();
-  const at = (x, y) => lattice[(((y % size) + size) % size) * size + (((x % size) + size) % size)];
-  const fade = (t) => t * t * (3 - 2 * t);
   return (x, y) => {
-    const x0 = Math.floor(x);
-    const y0 = Math.floor(y);
-    const fx = fade(x - x0);
-    const fy = fade(y - y0);
-    const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * fx;
-    const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * fx;
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const tx = x - xi;
+    const ty = y - yi;
+    const fx = tx * tx * (3 - 2 * tx);
+    const fy = ty * ty * (3 - 2 * ty);
+    const x0 = xi & 255;
+    const x1 = (xi + 1) & 255;
+    const r0 = (yi & 255) << 8;
+    const r1 = ((yi + 1) & 255) << 8;
+    const a = lattice[r0 | x0] + (lattice[r0 | x1] - lattice[r0 | x0]) * fx;
+    const b = lattice[r1 | x0] + (lattice[r1 | x1] - lattice[r1 | x0]) * fx;
     return a + (b - a) * fy;
   };
 }
 
-function fbm(noise, x, y, octaves) {
-  let sum = 0;
-  let amp = 1;
-  let freq = 1;
-  let norm = 0;
-  for (let o = 0; o < octaves; o++) {
-    sum += noise(x * freq, y * freq) * amp;
-    norm += amp;
-    amp *= 0.5;
-    freq *= 2;
-  }
-  return sum / norm;
-}
-
 const smoothstep = (a, b, x) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a);
   return t * t * (3 - 2 * t);
 };
 
-// ---------------------------------------------------------------- elevation
-const terrainNoise = makeValueNoise(2026);
-const scarpNoise = makeValueNoise(77);
-const maskNoise = makeValueNoise(1846);
+// ---------------------------------------------------------------- elevation (~ -2850 m to +420 m)
+const regionalNoise = makeFastNoise256(2026);
+const detailNoise = makeFastNoise256(9911);
+const scarpNoise = makeFastNoise256(77);
+const maskNoise = makeFastNoise256(1846);
+const rockNoise = makeFastNoise256(4242);
 
 const CRATERS = [
-  { cx: 290, cy: 95, r: 22, depth: 14 },
-  { cx: 150, cy: 225, r: 14, depth: 9 },
-  { cx: 335, cy: 230, r: 9, depth: 6 },
+  { cx: 3050, cy: 1650, r: 340, depth: 310 },
+  { cx: 1550, cy: 3850, r: 240, depth: 220 },
+  { cx: 3450, cy: 4100, r: 190, depth: 175 },
+  { cx: 920, cy: 1420, r: 210, depth: 190 },
+  { cx: 2420, cy: 2950, r: 130, depth: 135 },
 ];
 
-const RAMP_ROW = 150;
+// Smooth sedimentary plains acting as realistic landing ellipses on both sides of the scarp.
+const LANDING_FLATS = [
+  { cx: 1420, cy: 2520, r: 190 },
+  { cx: 1320, cy: 2920, r: 180 },
+  { cx: 2480, cy: 2740, r: 210 },
+  { cx: 2780, cy: 3180, r: 200 },
+  { cx: 3420, cy: 880, r: 170 },
+];
 
-const elev = new Float32Array(W * H);
+const RAMP_ROW = 2680;
+const elev = new Float32Array(CELLS);
+
+// Precompute 1D scarp x-position and ramp width per row
+const rowScarpX = new Float32Array(H);
+const rowHalfW = new Float32Array(H);
 for (let y = 0; y < H; y++) {
+  const n = scarpNoise(y / 520, 0.5) * 0.65 + scarpNoise(y / 180, 1.7) * 0.35;
+  rowScarpX[y] = 1920 + (n - 0.5) * 760;
+  const ramp = Math.exp(-(((y - RAMP_ROW) / 230) ** 2));
+  rowHalfW[y] = 28 + ramp * 420; // steep ~28-cell scarp everywhere except the gentle Neretva-like valley ramp
+}
+
+for (let y = 0; y < H; y++) {
+  const scarpX = rowScarpX[y];
+  const halfW = rowHalfW[y];
+  const rowOff = y * W;
+  // Filter active craters & flats per row to avoid inner-loop distance checks across 23.1M cells
+  const activeCraters = CRATERS.filter((c) => Math.abs(y - c.cy) < c.r * 1.6);
+  const activeFlats = LANDING_FLATS.filter((f) => Math.abs(y - f.cy) < f.r * 1.3);
+
   for (let x = 0; x < W; x++) {
-    // Delta top in the west, crater floor in the east, with a wavy scarp between.
-    const scarpX = 170 + (fbm(scarpNoise, y / 60, 0.5, 3) - 0.5) * 120;
-    // One gentle ramp through the scarp, so the two sides are connected by a single corridor.
-    const ramp = Math.exp(-(((y - RAMP_ROW) / 20) ** 2));
-    const halfWidth = 14 + ramp * 110;
-    const plateau = 1 - smoothstep(scarpX - halfWidth, scarpX + halfWidth, x);
-    let z = -2560 + plateau * 55;
-    z += (fbm(terrainNoise, x / 55, y / 55, 5) - 0.5) * 34;
-    z += (fbm(terrainNoise, x / 9 + 40, y / 9 + 40, 2) - 0.5) * 2.2;
-    z -= x * 0.012;
-    for (const c of CRATERS) {
+    const plateau = 1 - smoothstep(scarpX - halfW, scarpX + halfW, x);
+    let flatFactor = 1;
+    for (let fIdx = 0; fIdx < activeFlats.length; fIdx++) {
+      const f = activeFlats[fIdx];
+      const df = Math.hypot(x - f.cx, y - f.cy) / f.r;
+      if (df < 1.3) flatFactor = Math.min(flatFactor, smoothstep(0.72, 1.3, df));
+    }
+
+    const macro =
+      regionalNoise(x / 420, y / 420) * 0.6 +
+      regionalNoise(x / 140 + 13.7, y / 140 + 7.3) * 0.3 +
+      detailNoise(x / 36, y / 36) * 0.1;
+    const micro = detailNoise(x / 7.5 + 40, y / 7.5 + 40) - 0.5;
+
+    // Regional elevation spans ~ -2750 m (eastern basin) to +320 m (western highlands)
+    let z = -2580 + plateau * 620 + (W - x) * 0.48 - y * 0.04;
+    z += (macro - 0.5) * 460 * (0.15 + 0.85 * flatFactor);
+    z += micro * 16.5 * flatFactor;
+
+    for (let cIdx = 0; cIdx < activeCraters.length; cIdx++) {
+      const c = activeCraters[cIdx];
       const d = Math.hypot(x - c.cx, y - c.cy) / c.r;
       if (d < 1.6) {
-        z -= c.depth * (1 - smoothstep(0, 1, d)); // bowl
-        z += c.depth * 0.25 * Math.exp(-((d - 1) ** 2) / 0.03); // rim
+        z -= c.depth * (1 - smoothstep(0, 1, d));
+        z += c.depth * 0.28 * Math.exp(-((d - 1) ** 2) / 0.025);
       }
     }
-    elev[y * W + x] = z;
+    elev[rowOff + x] = z;
   }
 }
 
-// ---------------------------------------------------------------- slope + hillshade
-const slope = new Float32Array(W * H);
-const shade = new Float32Array(W * H);
-const ex = (x, y) => elev[Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))];
+// ---------------------------------------------------------------- slope (Uint8 ceiling-quantized) + hazard + shade
+const SLOPE_SCALE = 0.25;
+const SLOPE_NODATA_U8 = 255;
+const SLOPE_BASELINE_M = CELL_M;
+
+const ELEV_BASE_M = 0;
+const ELEV_SCALE_M = 0.5;
+const ELEV_NODATA_I16 = -32768;
+
+const slopeU8 = new Uint8Array(CELLS);
+const hazard = new Uint8Array(CELLS);
+const shadeU8 = new Uint8Array(CELLS); // 0..255 hillshade brightness
+const pointLanding = new Uint8Array(CELLS);
+const elevI16 = new Int16Array(CELLS);
+
+const invTwoCell = 1 / (2 * CELL_M);
+const radToDeg = 180 / Math.PI;
 const sunAz = (315 * Math.PI) / 180;
-const sunAlt = (40 * Math.PI) / 180;
-for (let y = 0; y < H; y++) {
-  for (let x = 0; x < W; x++) {
-    const dzdx = (ex(x + 1, y) - ex(x - 1, y)) / (2 * CELL_M); // east positive
-    const dzdy = (ex(x, y - 1) - ex(x, y + 1)) / (2 * CELL_M); // north positive (row 0 = north)
-    const g = Math.hypot(dzdx, dzdy);
-    slope[y * W + x] = (Math.atan(g) * 180) / Math.PI;
-    const sl = Math.atan(g * 2.5); // exaggerated for readability
-    const aspect = Math.atan2(-dzdx, -dzdy);
-    const s = Math.sin(sunAlt) * Math.cos(sl) + Math.cos(sunAlt) * Math.sin(sl) * Math.cos(sunAz - aspect);
-    shade[y * W + x] = Math.min(1, Math.max(0, s));
-  }
-}
+const cosSunAz = Math.cos(sunAz);
+const sinSunAz = Math.sin(sunAz);
+const sinSunAlt = Math.sin((40 * Math.PI) / 180);
+const cosSunAlt = Math.cos((40 * Math.PI) / 180);
 
-// ---------------------------------------------------------------- hazard + no-data
-// A blob in the north-east has no slope/hazard coverage, to exercise the
-// "no data" code paths (it is NOT the same thing as "forbidden").
-const hazard = new Uint8Array(W * H);
-const rockNoise = makeValueNoise(4242);
 let nodataCount = 0;
+
 for (let y = 0; y < H; y++) {
+  const yPrev = y > 0 ? y - 1 : 0;
+  const yNext = y + 1 < H ? y + 1 : H - 1;
+  const rowOff = y * W;
+  const prevOff = yPrev * W;
+  const nextOff = yNext * W;
+  const activeFlats = LANDING_FLATS.filter((f) => Math.abs(y - f.cy) <= f.r * 0.9);
+  const yMaskBias = smoothstep(350, 1450, y) * 0.52;
+
   for (let x = 0; x < W; x++) {
-    const i = y * W + x;
-    const blob = fbm(maskNoise, x / 45, y / 45, 3) + smoothstep(250, 400, x) * 0.3 - smoothstep(60, 220, y) * 0.5;
-    if (blob > 0.74) {
+    const i = rowOff + x;
+    const xPrev = x > 0 ? x - 1 : 0;
+    const xNext = x + 1 < W ? x + 1 : W - 1;
+
+    const dzdx = (elev[rowOff + xNext] - elev[rowOff + xPrev]) * invTwoCell;
+    const dzdy = (elev[prevOff + x] - elev[nextOff + x]) * invTwoCell; // north positive
+    const g = Math.hypot(dzdx, dzdy);
+    const deg = Math.atan(g) * radToDeg;
+
+    // Hillshade
+    const eg = g * 2.5;
+    const invNorm = 1 / Math.sqrt(1 + eg * eg);
+    const cosSl = invNorm;
+    // sin(sl) * cos(sunAz - aspect) where aspect = atan2(-dzdx, -dzdy)
+    const dotAspect = eg > 1e-9 ? ((-dzdy * cosSunAz - dzdx * sinSunAz) / g) * (eg * invNorm) : 0;
+    const s = Math.min(1, Math.max(0, sinSunAlt * cosSl + cosSunAlt * dotAspect));
+    shadeU8[i] = Math.round(s * 255);
+
+    // No-data swath in the NE corner
+    const blob = maskNoise(x / 380, y / 380) * 0.7 + maskNoise(x / 130, y / 130) * 0.3 + smoothstep(3100, 4300, x) * 0.34 - yMaskBias;
+    if (blob > 0.78) {
       hazard[i] = 255;
-      slope[i] = NODATA_F;
+      slopeU8[i] = SLOPE_NODATA_U8;
+      pointLanding[i] = 255;
+      elevI16[i] = ELEV_NODATA_I16;
       nodataCount++;
       continue;
     }
-    const s = slope[i];
-    const rocks = fbm(rockNoise, x / 14, y / 14, 3);
-    if (s > 25 || rocks > 0.78) hazard[i] = 2;
-    else if (s > 15 || rocks > 0.7) hazard[i] = 1;
-    else hazard[i] = 0;
+
+    const qByte = Math.min(254, Math.max(0, Math.ceil(deg / SLOPE_SCALE)));
+    slopeU8[i] = qByte;
+    elevI16[i] = Math.max(-32767, Math.min(32767, Math.round((elev[i] - ELEV_BASE_M) / ELEV_SCALE_M)));
+
+    let inFlat = false;
+    for (let fIdx = 0; fIdx < activeFlats.length; fIdx++) {
+      const f = activeFlats[fIdx];
+      const dx = x - f.cx;
+      const dy = y - f.cy;
+      if (dx * dx + dy * dy <= (f.r * 0.9) ** 2) {
+        inFlat = true;
+        break;
+      }
+    }
+    const rocks = inFlat ? 0.15 : rockNoise(x / 22, y / 22) * 0.7 + detailNoise(x / 9, y / 9) * 0.3;
+    const h = deg > 25 || rocks > 0.8 ? 2 : deg > 15 || rocks > 0.71 ? 1 : 0;
+    hazard[i] = h;
+
+    if (h === 0 && deg <= 4.2 && rocks < 0.36) pointLanding[i] = 0;
+    else if (h <= 1 && deg <= 8.5 && rocks < 0.62) pointLanding[i] = 1;
+    else pointLanding[i] = 2;
+  }
+}
+
+// ---------------------------------------------------------------- landing suitability (inis.bin)
+// Safe landing circle footprint check (250 m diameter -> radius 7 cells @ 20 m).
+const SAFE_DIAMETER_M = 250;
+const safeRadiusCells = Math.ceil(SAFE_DIAMETER_M / 2 / CELL_M);
+const circleOffsets = [];
+for (let dy = -safeRadiusCells; dy <= safeRadiusCells; dy++) {
+  for (let dx = -safeRadiusCells; dx <= safeRadiusCells; dx++) {
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= safeRadiusCells * safeRadiusCells) circleOffsets.push({ dx, dy, d2 });
+  }
+}
+// Check outer boundary ring first so unsuitable circles abort in 1-3 lookups
+circleOffsets.sort((a, b) => b.d2 - a.d2);
+const relOffsets = Int32Array.from(circleOffsets, (o) => o.dy * W + o.dx);
+
+const landing = new Uint8Array(CELLS);
+let suitCount = 0;
+let margCount = 0;
+
+for (let y = 0; y < H; y++) {
+  const rowOff = y * W;
+  const yInside = y >= safeRadiusCells && y < H - safeRadiusCells;
+  for (let x = 0; x < W; x++) {
+    const i = rowOff + x;
+    const p0 = pointLanding[i];
+    if (p0 === 255) {
+      landing[i] = 255;
+      continue;
+    }
+    if (!yInside || x < safeRadiusCells || x >= W - safeRadiusCells || p0 === 2) {
+      landing[i] = 2;
+      continue;
+    }
+    let worst = p0;
+    for (let k = 0; k < relOffsets.length; k++) {
+      const p = pointLanding[i + relOffsets[k]];
+      if (p >= 2) {
+        worst = 2;
+        break;
+      }
+      if (p === 1) worst = 1;
+    }
+    landing[i] = worst;
+    if (worst === 0) suitCount++;
+    else if (worst === 1) margCount++;
   }
 }
 
@@ -206,30 +333,71 @@ function encodePng(width, height, rgba) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; // bit depth
+  ihdr[8] = 8;
   ihdr[9] = 6; // RGBA
-  const raw = Buffer.alloc((width * 4 + 1) * height);
+  const stride = width * 4 + 1;
+  const raw = Buffer.allocUnsafe(stride * height);
   for (let y = 0; y < height; y++) {
-    raw[y * (width * 4 + 1)] = 0; // filter: none
-    Buffer.from(rgba.buffer, y * width * 4, width * 4).copy(raw, y * (width * 4 + 1) + 1);
+    raw[y * stride] = 0;
+    Buffer.from(rgba.buffer, rgba.byteOffset + y * width * 4, width * 4).copy(raw, y * stride + 1);
   }
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw, { level: 9 })),
+    chunk('IDAT', deflateSync(raw, { level: 3 })),
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
-function render(pixel) {
-  const rgba = new Uint8Array(W * H * 4);
-  for (let i = 0; i < W * H; i++) {
-    const [r, g, b, a] = pixel(i);
-    rgba.set([r, g, b, a], i * 4);
+
+// ---------------------------------------------------------------- XYZ tile pyramid + 4-corner overlays
+const TILE_MIN_Z = 8;
+const TILE_MAX_Z = 11;
+const TILE_SIZE = 256;
+const lonToTileX = (lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
+const latToTileY = (lat, z) => {
+  const rad = (lat * Math.PI) / 180;
+  const wy = (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;
+  return Math.floor(wy * 2 ** z);
+};
+
+const tileRoot = join(dataDir, 'karolar', 'terrain_shade');
+rmSync(tileRoot, { recursive: true, force: true });
+let tileCount = 0;
+for (let z = TILE_MIN_Z; z <= TILE_MAX_Z; z++) {
+  const n = 2 ** z;
+  const txMin = lonToTileX(BOUND_WEST, z);
+  const txMax = lonToTileX(BOUND_EAST, z);
+  const tyMin = latToTileY(BOUND_NORTH, z);
+  const tyMax = latToTileY(BOUND_SOUTH, z);
+  for (let tx = txMin; tx <= txMax; tx++) {
+    const colDir = join(tileRoot, String(z), String(tx));
+    mkdirSync(colDir, { recursive: true });
+    for (let ty = tyMin; ty <= tyMax; ty++) {
+      const rgba = new Uint8Array(TILE_SIZE * TILE_SIZE * 4);
+      for (let py = 0; py < TILE_SIZE; py++) {
+        const wy = (ty + (py + 0.5) / TILE_SIZE) / n;
+        const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * wy))) * 180) / Math.PI;
+        if (lat < BOUND_SOUTH || lat > BOUND_NORTH) continue;
+        const gy = Math.min(H - 1, Math.max(0, Math.floor(((BOUND_NORTH - lat) / (BOUND_NORTH - BOUND_SOUTH)) * H)));
+        const rowOff = gy * W;
+        for (let px = 0; px < TILE_SIZE; px++) {
+          const lon = ((tx + (px + 0.5) / TILE_SIZE) / n) * 360 - 180;
+          if (lon < BOUND_WEST || lon > BOUND_EAST) continue;
+          const gx = Math.min(W - 1, Math.max(0, Math.floor(((lon - BOUND_WEST) / (BOUND_EAST - BOUND_WEST)) * W)));
+          const s = 0.25 + 0.75 * (shadeU8[rowOff + gx] / 255);
+          const off = (py * TILE_SIZE + px) * 4;
+          rgba[off] = Math.round(205 * s);
+          rgba[off + 1] = Math.round(150 * s);
+          rgba[off + 2] = Math.round(112 * s);
+          rgba[off + 3] = 255;
+        }
+      }
+      writeFileSync(join(colDir, `${ty}.png`), encodePng(TILE_SIZE, TILE_SIZE, rgba));
+      tileCount++;
+    }
   }
-  return encodePng(W, H, rgba);
 }
 
-// ---------------------------------------------------------------- layer images
 const SLOPE_RAMP = [
   { upTo: 5, color: [46, 160, 110], label: '0–5°' },
   { upTo: 10, color: [160, 200, 80], label: '5–10°' },
@@ -242,28 +410,60 @@ const HAZARD_STYLE = {
   1: { color: [240, 190, 50], alpha: 170, label: 'Caution' },
   2: { color: [205, 45, 55], alpha: 210, label: 'Forbidden' },
 };
+const LANDING_STYLE = {
+  0: { color: [80, 210, 140], alpha: 185, label: 'Suitable (0)' },
+  1: { color: [242, 193, 78], alpha: 165, label: 'Marginal (1)' },
+  2: { color: [120, 45, 55], alpha: 95, label: 'Unsuitable (2)' },
+};
 const hex = ([r, g, b]) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
 
-writeFileSync(
-  join(dataDir, 'terrain_shade.png'),
-  render((i) => {
-    const s = 0.25 + 0.75 * shade[i];
-    return [Math.round(205 * s), Math.round(150 * s), Math.round(112 * s), 255];
-  }),
-);
+// Overview 4-corner overlays (1/4 scale = 1075 x 1344 px so repo stays compact while exercising mixed tile + image layers)
+const OVW_STEP = 4;
+const OVW_W = Math.floor(W / OVW_STEP);
+const OVW_H = Math.floor(H / OVW_STEP);
+function renderOverview(pixelAtCell) {
+  const rgba = new Uint8Array(OVW_W * OVW_H * 4);
+  for (let oy = 0; oy < OVW_H; oy++) {
+    const gy = oy * OVW_STEP;
+    const rowOff = gy * W;
+    for (let ox = 0; ox < OVW_W; ox++) {
+      const i = rowOff + ox * OVW_STEP;
+      const [r, g, b, a] = pixelAtCell(i);
+      const off = (oy * OVW_W + ox) * 4;
+      rgba[off] = r;
+      rgba[off + 1] = g;
+      rgba[off + 2] = b;
+      rgba[off + 3] = a;
+    }
+  }
+  return encodePng(OVW_W, OVW_H, rgba);
+}
+
 writeFileSync(
   join(dataDir, 'slope.png'),
-  render((i) => {
-    if (slope[i] === NODATA_F) return [0, 0, 0, 0];
-    const band = SLOPE_RAMP.find((b) => slope[i] <= b.upTo);
+  renderOverview((i) => {
+    const b = slopeU8[i];
+    if (b === SLOPE_NODATA_U8) return [0, 0, 0, 0];
+    const deg = b * SLOPE_SCALE;
+    const band = SLOPE_RAMP.find((entry) => deg <= entry.upTo);
     return [...band.color, 215];
   }),
 );
 writeFileSync(
   join(dataDir, 'hazard.png'),
-  render((i) => {
-    if (hazard[i] === 255) return [0, 0, 0, 0];
-    const st = HAZARD_STYLE[hazard[i]];
+  renderOverview((i) => {
+    const h = hazard[i];
+    if (h === 255) return [0, 0, 0, 0];
+    const st = HAZARD_STYLE[h];
+    return [...st.color, st.alpha];
+  }),
+);
+writeFileSync(
+  join(dataDir, 'landing.png'),
+  renderOverview((i) => {
+    const l = landing[i];
+    if (l === 255) return [0, 0, 0, 0];
+    const st = LANDING_STYLE[l];
     return [...st.color, st.alpha];
   }),
 );
@@ -273,18 +473,33 @@ const SYNTH = 'SYNTHETIC placeholder generated by scripts/make-fake-data.mjs —
 
 const layers = {
   sahte: true,
+  alan_en: 'Jezero & Nili Fossae region (synthetic 86 × 108 km)',
   not_en: SYNTH,
   katmanlar: [
     {
       id: 'terrain_shade',
-      ad_en: 'Shaded relief (synthetic)',
+      ad_en: 'Shaded relief (synthetic XYZ tiles)',
       tur: 'altlik',
-      dosya: 'terrain_shade.png',
-      koseler: CORNERS,
-      kaynak: 'Synthetic terrain (placeholder for an orbital DTM hillshade)',
+      karolar: 'karolar/terrain_shade/{z}/{x}/{y}.png',
+      sema: 'xyz',
+      min_zoom: TILE_MIN_Z,
+      max_zoom: TILE_MAX_Z,
+      sinir: SINIR,
+      kaynak: 'Synthetic regional terrain rendered as Web Mercator XYZ tiles (placeholder for CTX/HiRISE pyramid)',
       cozunurluk_m: CELL_M,
       guven_notu_en: 'Placeholder only. Do not use for any real planning.',
       lejant: [],
+    },
+    {
+      id: 'landing',
+      ad_en: 'Landing suitability (synthetic)',
+      tur: 'inis',
+      dosya: 'landing.png',
+      koseler: CORNERS,
+      kaynak: 'Synthetic footprint check on slope + hazard (placeholder for inis.bin)',
+      cozunurluk_m: CELL_M * OVW_STEP,
+      guven_notu_en: 'Placeholder only. Class 0 centres guarantee a clear 250 m landing circle.',
+      lejant: Object.values(LANDING_STYLE).map((s) => ({ renk: hex(s.color), etiket_en: s.label })),
     },
     {
       id: 'slope',
@@ -292,8 +507,8 @@ const layers = {
       tur: 'egim',
       dosya: 'slope.png',
       koseler: CORNERS,
-      kaynak: 'Derived from the synthetic terrain (placeholder for a DTM-derived slope map)',
-      cozunurluk_m: CELL_M,
+      kaynak: 'Derived from the synthetic terrain (placeholder for a CTX DTM-derived slope map)',
+      cozunurluk_m: CELL_M * OVW_STEP,
       guven_notu_en: 'Placeholder only. Transparent area = no data.',
       lejant: SLOPE_RAMP.map((b) => ({ renk: hex(b.color), etiket_en: b.label })),
     },
@@ -303,8 +518,8 @@ const layers = {
       tur: 'tehlike',
       dosya: 'hazard.png',
       koseler: CORNERS,
-      kaynak: 'Thresholded synthetic slope + random rock fields (placeholder)',
-      cozunurluk_m: CELL_M,
+      kaynak: 'Thresholded synthetic slope + rock fields (placeholder)',
+      cozunurluk_m: CELL_M * OVW_STEP,
       guven_notu_en: 'Placeholder only. Transparent area = no data, which is NOT the same as forbidden.',
       lejant: Object.values(HAZARD_STYLE).map((s) => ({ renk: hex(s.color), etiket_en: s.label })),
     },
@@ -314,15 +529,42 @@ writeFileSync(join(dataDir, 'katmanlar.json'), JSON.stringify(layers, null, 2));
 
 writeFileSync(
   join(costDir, 'izgara.json'),
-  JSON.stringify({ sahte: true, genislik: W, yukseklik: H, hucre_m: CELL_M, koseler: CORNERS }, null, 2),
+  JSON.stringify(
+    {
+      sahte: true,
+      alan_en: 'Jezero & Nili Fossae region (synthetic 86 × 108 km)',
+      genislik: W,
+      yukseklik: H,
+      hucre_m: CELL_M,
+      koseler: CORNERS,
+      egim_tipi: 'uint8',
+      egim_olcek: SLOPE_SCALE,
+      egim_veri_yok: SLOPE_NODATA_U8,
+      egim_taban_uzunlugu_m: SLOPE_BASELINE_M,
+      yukseklik_tipi: 'int16',
+      yukseklik_taban_m: ELEV_BASE_M,
+      yukseklik_olcek_m: ELEV_SCALE_M,
+      yukseklik_veri_yok: ELEV_NODATA_I16,
+    },
+    null,
+    2,
+  ),
 );
-writeFileSync(join(costDir, 'egim.bin'), Buffer.from(slope.buffer));
+writeFileSync(join(costDir, 'egim.bin'), Buffer.from(slopeU8.buffer));
 writeFileSync(join(costDir, 'tehlike.bin'), Buffer.from(hazard.buffer));
-const elevOut = Float32Array.from(elev, (z, i) => (hazard[i] === 255 ? NODATA_F : z));
-writeFileSync(join(costDir, 'yukseklik.bin'), Buffer.from(elevOut.buffer));
+writeFileSync(join(costDir, 'inis.bin'), Buffer.from(landing.buffer));
 
-// Science stops (PROPOSED file, not yet in the team contract). No photos: the
-// generator does not fabricate surface imagery.
+// Write little-endian Int16 yukseklik.bin directly on LE host (with DataView fallback if ever BE)
+const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+if (isLE) {
+  writeFileSync(join(costDir, 'yukseklik.bin'), Buffer.from(elevI16.buffer));
+} else {
+  const elevLeBuf = Buffer.allocUnsafe(CELLS * 2);
+  for (let i = 0; i < CELLS; i++) elevLeBuf.writeInt16LE(elevI16[i], i * 2);
+  writeFileSync(join(costDir, 'yukseklik.bin'), elevLeBuf);
+}
+
+// Science stops positioned across the corridor & landing plains so EVA & rover traverses are realistic.
 const cellLonLat = (col, row) => {
   const u = (col + 0.5) / W;
   const v = (row + 0.5) / H;
@@ -332,45 +574,89 @@ const stops = {
   sahte: true,
   not_en: SYNTH,
   duraklar: [
-    { id: 'stop_a', ad_en: 'Layered outcrop (synthetic)', konum: cellLonLat(70, 60), aciklama_en: 'Placeholder stop on the upper surface. Real description and photo to be supplied.' },
-    { id: 'stop_b', ad_en: 'Ramp head (synthetic)', konum: cellLonLat(120, 150), aciklama_en: 'Placeholder stop at the top of the only gentle way down the scarp.' },
-    { id: 'stop_c', ad_en: 'Boulder field (synthetic)', konum: cellLonLat(262, 172), aciklama_en: 'Placeholder stop on the lower plain.' },
-    { id: 'stop_d', ad_en: 'Unmapped corner (synthetic)', konum: cellLonLat(362, 28), aciklama_en: 'Placeholder stop inside the area with no slope or hazard data, to exercise the no-data warning.' },
+    {
+      id: 'stop_a',
+      ad_en: 'Western carbonate bench (synthetic)',
+      konum: cellLonLat(1710, 2560),
+      aciklama_en: 'Placeholder stop on the western highland bench within EVA reach of flat landing plains.',
+    },
+    {
+      id: 'stop_b',
+      ad_en: 'Valley breach crest (synthetic)',
+      konum: cellLonLat(1910, 2680),
+      aciklama_en: 'Placeholder stop at the gentle valley corridor crossing the regional scarp.',
+    },
+    {
+      id: 'stop_c',
+      ad_en: 'Delta fan deposit (synthetic)',
+      konum: cellLonLat(2340, 2730),
+      aciklama_en: 'Placeholder stop on the lower basin floor east of the scarp.',
+    },
+    {
+      id: 'stop_d',
+      ad_en: 'Unmapped NE margin (synthetic)',
+      konum: cellLonLat(3680, 620),
+      aciklama_en: 'Placeholder stop inside the area with no slope or hazard data, to exercise the no-data warning.',
+    },
   ],
 };
 writeFileSync(join(dataDir, 'duraklar.json'), JSON.stringify(stops, null, 2));
 
-// Mobility parameters: every number below is an invented placeholder so the UI
-// has something to read. The real file (with a source for each number) comes
-// from the mechanical engineer.
 const PLACEHOLDER = 'PLACEHOLDER — invented for UI development, not sourced';
-const traverser = (id, ad_en, azami_egim_derece, speeds, azami_engel_m, azami_sure_saat, enerji_katsayisi) => ({
-  id,
+const param = (deger, kaynak = PLACEHOLDER, guven = 'VARSAYIM') => ({ deger, kaynak, guven });
+
+const dictTraverser = (ad_en, aciklama_en, azami_egim_derece, speeds, azami_engel_m, azami_sure_saat, enerji_katsayisi) => ({
   ad_en,
-  azami_egim_derece,
-  hiz_tablosu: speeds.map(([egim_derece, hiz_m_s]) => ({ egim_derece, hiz_m_s })),
-  azami_engel_m,
-  azami_sure_saat,
-  enerji_katsayisi,
-  kaynaklar: {
-    azami_egim_derece: PLACEHOLDER,
-    hiz_tablosu: PLACEHOLDER,
-    azami_engel_m: PLACEHOLDER,
-    azami_sure_saat: PLACEHOLDER,
-    enerji_katsayisi: PLACEHOLDER,
-  },
+  aciklama_en,
+  azami_egim_derece: param(azami_egim_derece),
+  hiz_tablosu: param(speeds.map(([egim_derece, hiz_m_s]) => ({ egim_derece, hiz_m_s }))),
+  azami_engel_m: param(azami_engel_m),
+  azami_sure_saat: param(azami_sure_saat),
+  enerji_katsayisi: param(enerji_katsayisi),
 });
+
 const mobility = {
   sahte: true,
   not_en: SYNTH,
-  gezginler: [
-    traverser('suited_astronaut', 'Suited astronaut', 20, [[0, 1.0], [5, 0.9], [10, 0.7], [15, 0.5], [20, 0.3]], 0.3, 6, 1.0),
-    traverser('loaded_astronaut', 'Astronaut carrying load', 15, [[0, 0.8], [5, 0.7], [10, 0.5], [15, 0.3]], 0.2, 5, 1.4),
-    traverser('rover', 'Rover', 25, [[0, 2.5], [5, 2.2], [10, 1.6], [15, 1.0], [20, 0.6], [25, 0.3]], 0.4, 8, 0.6),
-  ],
+  inis_araci: {
+    azami_egim_derece: param(6),
+    azami_kaya_m: param(0.35),
+    azami_yukseklik_m: param(-2000),
+    guvenli_alan_capi_m: param(SAFE_DIAMETER_M, 'Placeholder until Çağatay supplies lander footprint diameter', 'VARSAYIM'),
+  },
+  yuruyen_insan: dictTraverser(
+    'Walking astronaut (suited)',
+    'Suited EVA on foot.',
+    20,
+    [[0, 1.0], [5, 0.9], [10, 0.7], [15, 0.5], [20, 0.3]],
+    0.3,
+    6,
+    1.0,
+  ),
+  roverli_insan: dictTraverser(
+    'Crewed rover',
+    'Range bounded by walk-back survival rule if the rover fails.',
+    18,
+    [[0, 2.2], [5, 1.9], [10, 1.4], [15, 0.9], [18, 0.5]],
+    0.35,
+    4,
+    0.8,
+  ),
+  rover: dictTraverser(
+    'Uncrewed rover',
+    'Robotic traverse without human life-support time cap.',
+    25,
+    [[0, 2.5], [5, 2.2], [10, 1.6], [15, 1.0], [20, 0.6], [25, 0.3]],
+    0.4,
+    12,
+    0.6,
+  ),
 };
 writeFileSync(join(outDir, 'mobilite_parametreleri.json'), JSON.stringify(mobility, null, 2));
 
-const pct = ((100 * nodataCount) / (W * H)).toFixed(1);
-console.log(`Synthetic data written to ${outDir}`);
-console.log(`  grid ${W} x ${H} cells @ ${CELL_M} m = ${W * CELL_M} m x ${H * CELL_M} m, no-data ${pct}%`);
+const pct = ((100 * nodataCount) / CELLS).toFixed(1);
+const elapsedS = ((performance.now() - tStart) / 1000).toFixed(2);
+console.log(`Synthetic data written to ${outDir} in ${elapsedS} s`);
+console.log(
+  `  grid ${W} x ${H} (${CELLS.toLocaleString('en-US')} cells @ ${CELL_M} m = ${(W * CELL_M) / 1000} km x ${(H * CELL_M) / 1000} km), uint8 slope + int16 elev, ${tileCount} XYZ tiles (z${TILE_MIN_Z}..z${TILE_MAX_Z}), no-data ${pct}%, landing class-0 ${suitCount}, class-1 ${margCount}`,
+);

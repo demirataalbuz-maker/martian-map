@@ -1,9 +1,10 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Traverser selector, built entirely from mobilite_parametreleri.json. Shows
-// each parameter of the selected traverser together with its stated source.
+// each parameter of the selected traverser (and landing craft constraints)
+// together with its stated source and confidence level.
 
-import type { Traverser } from './data';
+import type { ConfidenceLevel, LandingCraftParams, Traverser } from './data';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -13,6 +14,25 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 }
 
 const present = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+
+const CONFIDENCE_LABELS_EN: Record<string, string> = {
+  olculmus: 'measured',
+  tasarim_degeri: 'design value',
+  olceklenmis: 'scaled',
+  varsayim: 'ASSUMPTION',
+};
+
+function formatConfidence(raw?: ConfidenceLevel): string | null {
+  if (!raw) return null;
+  const mapped = CONFIDENCE_LABELS_EN[raw.toLowerCase()];
+  return mapped ?? raw;
+}
+
+function formatMeta(kaynak?: string, guven?: ConfidenceLevel): string {
+  const src = kaynak || 'not stated';
+  const conf = formatConfidence(guven);
+  return conf ? `Source: ${src} · Confidence: ${conf}` : `Source: ${src}`;
+}
 
 function parameterRows(t: Traverser): { label: string; value: string; key: string }[] {
   const speeds = t.hiz_tablosu.map((entry) => `${entry.hiz_m_s} m/s at ${entry.egim_derece}°`).join(', ');
@@ -26,23 +46,61 @@ function parameterRows(t: Traverser): { label: string; value: string; key: strin
   return rows;
 }
 
-export function initTraverserSelector(traversers: Traverser[], root: HTMLElement, onChange: (traverser: Traverser) => void): void {
+function landingRows(lc: LandingCraftParams): { label: string; value: string; key: string }[] {
+  const rows: { label: string; value: string; key: string }[] = [];
+  if (present(lc.guvenli_alan_capi_m)) {
+    rows.push({ label: 'Safe landing circle Ø', value: `${lc.guvenli_alan_capi_m} m`, key: 'guvenli_alan_capi_m' });
+  }
+  if (present(lc.azami_egim_derece)) {
+    rows.push({ label: 'Lander slope limit', value: `${lc.azami_egim_derece}°`, key: 'azami_egim_derece' });
+  }
+  if (present(lc.azami_kaya_m)) {
+    rows.push({ label: 'Lander max rock', value: `${lc.azami_kaya_m} m`, key: 'azami_kaya_m' });
+  }
+  if (present(lc.azami_yukseklik_m)) {
+    rows.push({ label: 'Lander max elevation', value: `${lc.azami_yukseklik_m} m`, key: 'azami_yukseklik_m' });
+  }
+  return rows;
+}
+
+export function initTraverserSelector(
+  traversers: Traverser[],
+  landingCraft: LandingCraftParams | null,
+  root: HTMLElement,
+  onChange: (traverser: Traverser) => void,
+  slopeBaselineM?: number,
+): void {
   root.replaceChildren();
 
   const group = el('div', 'traverser-options');
   group.setAttribute('role', 'radiogroup');
   group.setAttribute('aria-label', 'Traverser type');
+  const noteEl = el('p', 'traverser-note');
   const details = el('details', 'traverser-details');
-  const summary = el('summary', undefined, 'Parameters and sources');
+  const summary = el('summary', undefined, 'Parameters, sources & confidence');
   const list = el('dl', 'facts');
   details.append(summary, list);
 
   const showParameters = (t: Traverser): void => {
+    noteEl.textContent = t.aciklama_en ?? '';
+    noteEl.hidden = !t.aciklama_en;
     list.replaceChildren();
+    if (present(slopeBaselineM) && slopeBaselineM > 0) {
+      const dd = el('dd', undefined, `${slopeBaselineM} m`);
+      dd.append(el('span', 'source', 'Grid slope measurement baseline (izgara.json)'));
+      list.append(el('dt', undefined, 'Slope baseline'), dd);
+    }
     for (const row of parameterRows(t)) {
       const dd = el('dd', undefined, row.value);
-      dd.append(el('span', 'source', `Source: ${t.kaynaklar?.[row.key] ?? 'not stated'}`));
+      dd.append(el('span', 'source', formatMeta(t.kaynaklar[row.key], t.guvenler[row.key])));
       list.append(el('dt', undefined, row.label), dd);
+    }
+    if (landingCraft) {
+      for (const row of landingRows(landingCraft)) {
+        const dd = el('dd', undefined, row.value);
+        dd.append(el('span', 'source', formatMeta(landingCraft.kaynaklar[row.key], landingCraft.guvenler[row.key])));
+        list.append(el('dt', undefined, row.label), dd);
+      }
     }
   };
 
@@ -63,5 +121,5 @@ export function initTraverserSelector(traversers: Traverser[], root: HTMLElement
   });
 
   showParameters(traversers[0]);
-  root.append(group, details);
+  root.append(group, noteEl, details);
 }
