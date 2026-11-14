@@ -35,13 +35,42 @@ function formatMeta(kaynak?: string, guven?: ConfidenceLevel): string {
 }
 
 function parameterRows(t: Traverser): { label: string; value: string; key: string }[] {
-  const speeds = t.hiz_tablosu.map((entry) => `${entry.hiz_m_s} m/s at ${entry.egim_derece}°`).join(', ');
-  const rows = [
+  const speeds = t.hiz_tablosu
+    .map((entry) =>
+      present(entry.hiz_km_sa)
+        ? `${entry.hiz_km_sa} km/h (${entry.hiz_m_s.toFixed(2)} m/s) at ${entry.egim_derece}°`
+        : `${entry.hiz_m_s} m/s at ${entry.egim_derece}°`,
+    )
+    .join(', ');
+  const rows: { label: string; value: string; key: string }[] = [
     { label: 'Slope limit', value: `${t.azami_egim_derece}°`, key: 'azami_egim_derece' },
-    { label: 'Speed by slope', value: speeds, key: 'hiz_tablosu' },
   ];
+  if (present(t.yurume_baz_hiz_km_sa)) {
+    rows.push({ label: 'Base walk speed', value: `${t.yurume_baz_hiz_km_sa} km/h`, key: 'yurume_baz_hiz_km_sa' });
+  }
+  rows.push({ label: 'Speed by slope', value: speeds, key: 'hiz_tablosu' });
+  if (present(t.uzaklik_tavani_m)) {
+    const km = Number((t.uzaklik_tavani_m / 1000).toFixed(2));
+    rows.push({ label: 'Max radial standoff', value: `${km} km (${Math.round(t.uzaklik_tavani_m)} m)`, key: 'uzaklik_tavani_m' });
+  }
+  if (present(t.yasam_destek_tasarim_saat)) {
+    rows.push({ label: 'Suit design duration', value: `${t.yasam_destek_tasarim_saat} h`, key: 'yasam_destek_tasarim_saat' });
+  }
+  if (present(t.sure_payi)) {
+    rows.push({ label: 'Life-support margin factor', value: String(t.sure_payi), key: 'sure_payi' });
+  }
+  if (present(t.azami_sure_saat)) rows.push({ label: 'Max duration budget', value: `${t.azami_sure_saat} h`, key: 'azami_sure_saat' });
   if (present(t.azami_engel_m)) rows.push({ label: 'Max obstacle', value: `${t.azami_engel_m} m`, key: 'azami_engel_m' });
-  if (present(t.azami_sure_saat)) rows.push({ label: 'Max duration', value: `${t.azami_sure_saat} h`, key: 'azami_sure_saat' });
+  if (t.enerji_profili) {
+    const ep = t.enerji_profili;
+    const reserveWh = Math.round(ep.enerji_kapasite_wh * ep.rezerv_orani);
+    const usableWh = Math.round(ep.enerji_kalan_wh - reserveWh);
+    rows.push({
+      label: 'Energy profile (demo)',
+      value: `${ep.profil_adi_en} — ${ep.kutle_kg} kg, ${usableWh} Wh usable + ${reserveWh} Wh reserve`,
+      key: 'enerji_profili',
+    });
+  }
   if (present(t.enerji_katsayisi)) rows.push({ label: 'Energy coefficient', value: String(t.enerji_katsayisi), key: 'enerji_katsayisi' });
   return rows;
 }
@@ -104,7 +133,7 @@ export function initTraverserSelector(
   landingCraft: LandingCraftParams | null,
   root: HTMLElement,
   onChange: (traverser: Traverser) => void,
-  grid?: Pick<GridMeta, 'egim_taban_uzunlugu_m' | 'egim_yontemi_en' | 'kaynak_en' | 'guven_notu_en'>,
+  grid?: Pick<GridMeta, 'hucre_m' | 'egim_taban_uzunlugu_m' | 'egim_yontemi_en' | 'kaynak_en' | 'guven_notu_en'>,
 ): TraverserSelectorController {
   root.replaceChildren();
 
@@ -114,10 +143,13 @@ export function initTraverserSelector(
   const noteEl = el('p', 'traverser-note');
   const details = el('details', 'traverser-details');
   const summary = el('summary', undefined, 'How mobility limits were chosen (parameters & sources)');
+  const cellScaleNote = present(grid?.hucre_m)
+    ? `Computed with ${grid!.hucre_m} m resolution data; obstacles smaller than this scale were not evaluated. `
+    : '';
   const methodNote = el(
     'p',
     'route-note',
-    'Every limit, speed table and max duration is read from mobilite_parametreleri.json with its stated source and confidence tag. Speed depends on slope magnitude only; uphill and downhill are treated the same.',
+    `${cellScaleNote}Every limit, speed table and duration budget is read from mobilite_parametreleri.json with its source and confidence tag. Model boundaries: undirected slope magnitude only (no directed uphill/downhill search; conservative uphill walking speeds used for walk-back), science stops visited in user-selected order (no TSP stop reordering), no turn-angle penalty, rock and thermal inertia data not available (assumed firm, rock-free baseline), and demo vehicle energy evaluated post-hoc on the selected route.`,
   );
   const list = el('dl', 'facts');
   details.append(summary, methodNote, list);

@@ -1,6 +1,9 @@
 // AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 // Messages exchanged between the page and the routing Web Worker.
 
+export type SafetyDecision = 'GO' | 'CAUTION' | 'NO-GO';
+export type BrokenCondition = 'time' | 'distance';
+
 /** The part of a traverser's parameters the router needs. All values come from mobilite_parametreleri.json. */
 export interface RouterTraverser {
   maxSlopeDeg: number;
@@ -8,6 +11,8 @@ export interface RouterTraverser {
   speedTable: [number, number][];
   /** Optional maximum excursion duration in seconds (derived from azami_sure_saat * 3600). */
   maxTimeS: number | null;
+  /** Optional straight-line radial standoff cap from base/landing in metres (derived from uzaklik_tavani_m). */
+  maxRadialDistM?: number | null;
 }
 
 /** Apollo walk-back survival rule parameters (elapsed time + walking return time <= limitS). */
@@ -45,6 +50,10 @@ export interface TraverserComparisonRow {
   maxSlope_deg?: number;
   withinLimit?: boolean;
   walkBackExceeded?: boolean;
+  radialCapExceeded?: boolean;
+  brokenConditions?: BrokenCondition[];
+  decision?: SafetyDecision;
+  decisionReasons?: string[];
   marginalLanding?: boolean;
   failReason?: string;
 }
@@ -88,6 +97,8 @@ export type ToWorker =
       stopWorkS?: number;
       /** When true, allows crossing unmapped (no-data = 255) cells at slowest speed; default false (blocked). */
       allowNoData?: boolean;
+      /** True when rock abundance or thermal inertia layers are absent (assumed), triggering CAUTION when otherwise safe. */
+      assumedTerrainData?: boolean;
       traverser: RouterTraverser;
       /** Optional Apollo walk-back survival check (used for crewed rover). */
       walkBack?: WalkBackSpec | null;
@@ -105,6 +116,7 @@ export type ToWorker =
       roundTrip: boolean;
       stopWorkS: number;
       allowNoData: boolean;
+      assumedTerrainData?: boolean;
       entries: TraverserComparisonEntry[];
     };
 
@@ -150,10 +162,24 @@ export interface RouteSuccess {
   /** Apollo walk-back survival check results (non-null when walk-back applies, e.g. crewed rover). */
   walkBackLimit_s: number | null;
   maxWalkBackTotal_s: number | null;
+  peakWalkBackDist_m: number | null;
   walkBackExceeded: boolean;
   walkBackCell: number | null;
   walkBackDist_m: number | null;
-  /** Per path cell: 1 where mission time or walk-back survival limit is exceeded, 0 where safe; null when wholly safe. */
+  /** Straight-line Euclidean Mars grid distance from base/landing (metres) and optional radial cap check. */
+  maxRadialDist_m: number;
+  radialCapLimit_m: number | null;
+  radialCapExceeded: boolean;
+  radialCapCell: number | null;
+  radialCapDist_m: number | null;
+  /** Lowest remaining time safety margin ratio across all points (e.g. 0.08 = 8%), or null when no time cap applies. */
+  minMarginRatio: number | null;
+  /** Broken safety condition(s) along the route ('time' and/or 'distance'), empty when none broke. */
+  brokenConditions: BrokenCondition[];
+  /** Corridor suitability decision: NO-GO if any red unsafe segment; CAUTION if margin < 10% or assumed terrain data; else GO. */
+  decision: SafetyDecision;
+  decisionReasons: string[];
+  /** Per path cell: 1 where mission time, walk-back, or radial distance cap is exceeded, 0 where safe; null when wholly safe. */
   unsafeMask: Uint8Array | null;
   /** Per path cell: distance from the start in metres (grid-based). */
   profileDist: Float32Array;

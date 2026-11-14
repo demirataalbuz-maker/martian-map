@@ -63,6 +63,10 @@ export interface GridMeta {
   yukseklik_veri_yok: number;
   kaynak_en?: string;
   guven_notu_en?: string;
+  /** True only when an explicit rock-abundance cost input was evaluated; otherwise false/undefined (assumed). */
+  kaya_verisi_var?: boolean;
+  /** True only when an explicit thermal-inertia cost input was evaluated; otherwise false/undefined (assumed). */
+  termal_atalet_verisi_var?: boolean;
 }
 
 const MAX_MERCATOR_LAT = 85.051129;
@@ -366,6 +370,8 @@ export async function loadGridMeta(): Promise<GridMeta> {
     yukseklik_veri_yok,
     kaynak_en: optStr(raw.kaynak_en),
     guven_notu_en: optStr(raw.guven_notu_en),
+    kaya_verisi_var: raw.kaya_verisi_var === true,
+    termal_atalet_verisi_var: raw.termal_atalet_verisi_var === true,
   };
 }
 
@@ -394,6 +400,19 @@ export interface ParamMeta {
 export interface SpeedEntry {
   egim_derece: number;
   hiz_m_s: number;
+  hiz_km_sa?: number;
+}
+
+export interface EnergyProfile {
+  profil_adi_en: string;
+  kutle_kg: number;
+  yercekimi_m_s2: number;
+  yuvarlanma_direnci: number;
+  verim: number;
+  baz_guc_w: number;
+  enerji_kapasite_wh: number;
+  enerji_kalan_wh: number;
+  rezerv_orani: number;
 }
 
 export interface Traverser {
@@ -406,10 +425,20 @@ export interface Traverser {
   uyari_egim_derece?: number;
   azami_engel_m?: number;
   azami_sure_saat?: number;
+  /** Optional design life-support duration before safety reserve factor (hours). */
+  yasam_destek_tasarim_saat?: number;
+  /** Optional life-support safety factor (0..1). */
+  sure_payi?: number;
+  /** Optional flat-ground reference walking speed (km/h). */
+  yurume_baz_hiz_km_sa?: number;
   /** Optional explicit suit life-support limit (hours) for walk-back survival checks. */
   yasam_destek_saat?: number;
   /** Optional explicit toggle for walk-back survival check (defaults to true for roverli_insan). */
   yuruyus_donus?: boolean;
+  /** Optional straight-line radial standoff cap from base/landing (metres). */
+  uzaklik_tavani_m?: number;
+  /** Optional post-hoc vehicle energy profile (evaluated on drawn route without altering A* search). */
+  enerji_profili?: EnergyProfile;
   enerji_katsayisi?: number;
   kaynaklar: Record<string, string>;
   guvenler: Record<string, ConfidenceLevel>;
@@ -476,13 +505,23 @@ function parseSpeedTable(rawField: unknown, where: string): { entries: SpeedEntr
         entries.push({ egim_derece: s, hiz_m_s: v.value });
       } else if (isRecord(item)) {
         const s = unwrapField(item.egim_derece ?? item.egim ?? item.slope_deg).value;
-        const v = unwrapField(item.hiz_m_s ?? item.hiz ?? item.speed_m_s);
-        if (!isNonNegative(s) || !isPositive(v.value)) {
-          throw new Error(`${where}: every "hiz_tablosu" entry needs non-negative "egim_derece" and positive "hiz_m_s"`);
+        const vKmh = unwrapField(item.hiz_km_sa ?? item.hiz_km_h ?? item.speed_km_h);
+        const vMs = unwrapField(item.hiz_m_s ?? item.hiz ?? item.speed_m_s);
+        const hasKmh = isPositive(vKmh.value);
+        const hasMs = isPositive(vMs.value);
+        if (!isNonNegative(s) || (!hasKmh && !hasMs)) {
+          throw new Error(
+            `${where}: every "hiz_tablosu" entry needs non-negative "egim_derece" and positive "hiz_m_s" or "hiz_km_sa"`,
+          );
         }
-        rowKaynak ??= v.kaynak;
-        rowGuven ??= v.guven;
-        entries.push({ egim_derece: s, hiz_m_s: v.value });
+        rowKaynak ??= vKmh.kaynak ?? vMs.kaynak;
+        rowGuven ??= vKmh.guven ?? vMs.guven;
+        const speedMs = hasKmh ? (vKmh.value as number) / 3.6 : (vMs.value as number);
+        entries.push({
+          egim_derece: s,
+          hiz_m_s: speedMs,
+          ...(hasKmh ? { hiz_km_sa: vKmh.value as number } : {}),
+        });
       } else {
         throw new Error(`${where}: malformed entry in "hiz_tablosu"`);
       }
@@ -550,8 +589,55 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
   const uyariRaw = readNum('uyari_egim_derece');
   const engelRaw = readNum('azami_engel_m', ['azami_kaya_m']);
   const sureRaw = readNum('azami_sure_saat');
+  const yasamTasarimRaw = readNum('yasam_destek_tasarim_saat');
+  const surePayiRaw = readNum('sure_payi');
+  const yurumeBazRaw = readNum('yurume_baz_hiz_km_sa');
   const yasamRaw = readNum('yasam_destek_saat', ['yuruyus_sure_saat', 'walk_back_saat']);
+  let uzaklikM = readNum('uzaklik_tavani_m');
+  if (uzaklikM === undefined) {
+    const uzaklikKm = readNum('uzaklik_tavani_km');
+    if (isPositive(uzaklikKm)) {
+      uzaklikM = uzaklikKm * 1000;
+      if (kaynaklar.uzaklik_tavani_km && !kaynaklar.uzaklik_tavani_m) kaynaklar.uzaklik_tavani_m = kaynaklar.uzaklik_tavani_km;
+      if (guvenler.uzaklik_tavani_km && !guvenler.uzaklik_tavani_m) guvenler.uzaklik_tavani_m = guvenler.uzaklik_tavani_km;
+    }
+  }
   const enerjiRaw = readNum('enerji_katsayisi');
+
+  let enerji_profili: EnergyProfile | undefined;
+  if ('enerji_profili' in raw && raw.enerji_profili !== undefined) {
+    const epUnwrapped = unwrapField(raw.enerji_profili);
+    if (epUnwrapped.kaynak) kaynaklar.enerji_profili = epUnwrapped.kaynak;
+    if (epUnwrapped.guven) guvenler.enerji_profili = epUnwrapped.guven;
+    if (isRecord(epUnwrapped.value)) {
+      const ep = epUnwrapped.value;
+      if (
+        isPositive(ep.kutle_kg) &&
+        isPositive(ep.yercekimi_m_s2) &&
+        isNonNegative(ep.yuvarlanma_direnci) &&
+        isPositive(ep.verim) &&
+        isNonNegative(ep.baz_guc_w) &&
+        isPositive(ep.enerji_kapasite_wh) &&
+        isPositive(ep.enerji_kalan_wh) &&
+        isNonNegative(ep.rezerv_orani)
+      ) {
+        enerji_profili = {
+          profil_adi_en:
+            typeof ep.profil_adi_en === 'string' && ep.profil_adi_en.trim()
+              ? ep.profil_adi_en.trim()
+              : 'Demo vehicle profile',
+          kutle_kg: ep.kutle_kg,
+          yercekimi_m_s2: ep.yercekimi_m_s2,
+          yuvarlanma_direnci: ep.yuvarlanma_direnci,
+          verim: ep.verim,
+          baz_guc_w: ep.baz_guc_w,
+          enerji_kapasite_wh: ep.enerji_kapasite_wh,
+          enerji_kalan_wh: ep.enerji_kalan_wh,
+          rezerv_orani: ep.rezerv_orani,
+        };
+      }
+    }
+  }
 
   const walkFlagField = raw.yuruyus_donus ?? raw.walk_back;
   const walkFlagUnwrapped = walkFlagField !== undefined ? unwrapField(walkFlagField).value : undefined;
@@ -566,8 +652,13 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
     uyari_egim_derece: isPositive(uyariRaw) && uyariRaw < azami_egim_derece ? uyariRaw : undefined,
     azami_engel_m: isPositive(engelRaw) ? engelRaw : undefined,
     azami_sure_saat: isPositive(sureRaw) ? sureRaw : undefined,
+    yasam_destek_tasarim_saat: isPositive(yasamTasarimRaw) ? yasamTasarimRaw : undefined,
+    sure_payi: isPositive(surePayiRaw) ? surePayiRaw : undefined,
+    yurume_baz_hiz_km_sa: isPositive(yurumeBazRaw) ? yurumeBazRaw : undefined,
     yasam_destek_saat: isPositive(yasamRaw) ? yasamRaw : undefined,
     yuruyus_donus,
+    uzaklik_tavani_m: isPositive(uzaklikM) ? uzaklikM : undefined,
+    enerji_profili,
     enerji_katsayisi: isPositive(enerjiRaw) ? enerjiRaw : undefined,
     kaynaklar,
     guvenler,

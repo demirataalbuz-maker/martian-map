@@ -65,9 +65,9 @@ Key contract details:
 
 - Mission options: round-trip return to landing / start (enabled by default), configurable work duration per science stop, policy toggle for unmapped ("no data") terrain (blocked by default), 1-click sample mission, live Mars terrain cursor/tap HUD, and side-by-side comparison across all traversers.
 - Thematic overlays (`tur !== 'altlik'`) start hidden with 65% default opacity so the primary basemap stays legible underneath when toggled on.
-- Totals: distance, estimated mission time (with travel + stop work breakdown), steepest slope (with measurement baseline), climb / descent, crewed rover walk-back check, and per-leg figures.
-- Elevation and slope profiles are plain SVG drawn by the app (no chart library), marking stops, no-data spans, and any max-duration or walk-back threshold point.
-- Warnings: estimated time above `azami_sure_saat`; Apollo walk-back survival limit exceeded on crewed rover routes (full route stays drawn with unsafe segments highlighted in dashed red and a `!` threshold marker); marginal landing zone fallback; slope close to the limit; crossing "no data"; crossing "caution" (all step-weighted with diagonal × √2).
+- Totals: `GO / CAUTION / NO-GO` corridor suitability badge, distance, max straight-line base standoff, estimated mission time (with travel + stop work breakdown), steepest slope (with measurement baseline), climb / descent, crewed rover walk-back check, post-hoc demo vehicle energy summary (`Wh`), and per-leg figures.
+- Elevation and slope profiles are plain SVG drawn by the app (no chart library), marking stops, no-data spans, and any time or radial-distance threshold point.
+- Warnings & decision badge: `NO-GO` when any red unsafe segment occurs (`time` — walk-back or max duration exceeded; `distance` — `> 10 km` radial standoff cap exceeded); `CAUTION` when minimum time margin `< 10%` or when rock abundance / thermal inertia data are not available (`assumed`); `GO` otherwise. Full route remains drawn with unsafe spans highlighted in dashed red and `!` threshold markers.
 - "Close to the limit" uses the optional `uyari_egim_derece` field of a traverser; without it, the highest positive speed-table breakpoint below the limit is used.
 - Without `maliyet/yukseklik.bin` the app still works and says the elevation profile is unavailable.
 
@@ -98,4 +98,11 @@ Worker). All numbers come from the data files:
 - cell speed = the traverser's speed table interpolated at the cell's slope (speed depends on slope magnitude only; uphill and downhill are treated the same)
 - impassable = hazard class 2 (forbidden) or slope above the traverser's limit; diagonal steps never cut a blocked corner
 - "caution" cells are passable at the slowest speed in the traverser's table and trigger a route warning; unmapped ("no data", 255) cells are **not crossed by default** (distinct from "forbidden" 2, with a dedicated message) and can optionally be allowed at slowest speed with a warning via the UI toggle
-- for crewed rover traverses (`roverli_insan` or `yuruyus_donus: true`), a grid Dijkstra walk-back time field from the start / landing cell using the suited walking astronaut speed table checks `elapsed_time(n) + walk_back_time(n) ≤ suit_life_support_limit` at every step along the route
+- for crewed rover traverses (`roverli_insan` or `yuruyus_donus: true`), a grid Dijkstra walk-back time field from the start / landing cell using the suited walking astronaut speed table checks `elapsed_time(n) + walk_back_time(n) ≤ suit_life_support_limit` at every step along the route, alongside the `10 km` straight-line radial standoff cap from base
+
+## Model boundaries and limitations
+
+- **Spatial scale:** Computed with 20 m resolution data; obstacles smaller than this scale (boulders `< 0.30 m`, sand ripples, sharp rocks, wheelbase-scale breakovers) were not evaluated.
+- **Missing surface layers:** Quantitative rock abundance and thermal inertia grids are not available in this dataset (assumed firm, rock-free baseline), so routes without `NO-GO` violations are reported as `CAUTION: rock and thermal inertia data not available (assumed)`.
+- **Search simplifications:** A* search uses undirected slope magnitude only (no directed uphill/downhill search; conservative uphill walking speeds are used for walk-back), visits science stops in the exact order chosen by the user (no TSP stop reordering), and omits turn-angle time penalties.
+- **Post-hoc energy:** Vehicle battery energy (`Wh`, labelled as the Mars Rover Demo v1 scenario profile) is evaluated along the already-selected least-time route without altering A* search.

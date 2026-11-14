@@ -13,7 +13,7 @@ import { LngLatBounds, Marker, type GeoJSONSource, type Map as MlMap, type MapMo
 import { ELEVATION_URL, HAZARD_URL, LANDING_URL, SLOPE_URL } from './config';
 import type { GridMeta, LandingCraftParams, LonLat, ScienceStop, Traverser } from './data';
 import type { GridGeo } from './grid';
-import { formatDuration, renderComparison, renderResults } from './results';
+import { computeDemoEnergy, formatDuration, renderComparison, renderResults } from './results';
 import { findWalkBackReference } from './traverser';
 import type {
   FromWorker,
@@ -38,6 +38,10 @@ function toRouterTraverser(t: Traverser): RouterTraverser {
     maxTimeS:
       typeof t.azami_sure_saat === 'number' && Number.isFinite(t.azami_sure_saat) && t.azami_sure_saat > 0
         ? t.azami_sure_saat * 3600
+        : null,
+    maxRadialDistM:
+      typeof t.uzaklik_tavani_m === 'number' && Number.isFinite(t.uzaklik_tavani_m) && t.uzaklik_tavani_m > 0
+        ? t.uzaklik_tavani_m
         : null,
   };
 }
@@ -137,6 +141,7 @@ export function initRoute(
 
   // Minimum centre-to-centre distance between primary and backup landing zones (from JSON, never hardcoded).
   const minSeparationM = options.landingCraft?.guvenli_alan_capi_m ?? 0;
+  const assumedTerrainData = !(grid.kaya_verisi_var && grid.termal_atalet_verisi_var);
 
   const validSampleStops = options.stops.filter((s) => geo.lonLatToIndex(s.konum[0], s.konum[1]) !== null);
   sampleRow.hidden = validSampleStops.length === 0;
@@ -396,6 +401,7 @@ export function initRoute(
       roundTrip: roundTripInput.checked,
       stopWorkS: currentStopWorkS(),
       allowNoData: allowNoDataInput.checked,
+      assumedTerrainData,
       entries: options.traversers.map((t) => ({
         id: t.id,
         name: t.ad_en,
@@ -413,30 +419,48 @@ export function initRoute(
     clearTurnAroundMarker();
     lastResult = result && result.legs.length > 0 ? result : null;
     downloadButton.disabled = lastResult === null;
-    renderResults(results, result, traverser, grid.egim_taban_uzunlugu_m);
+    renderResults(results, result, traverser, grid.egim_taban_uzunlugu_m, grid.hucre_m);
 
-    if (lastResult && lastResult.walkBackExceeded && lastResult.walkBackCell !== null) {
-      const el = document.createElement('div');
-      el.className = 'waypoint turnaround';
-      el.textContent = '!';
-      const wbHours = lastResult.walkBackLimit_s ? Number((lastResult.walkBackLimit_s / 3600).toFixed(2)) : 0;
-      el.title = `Walk-back survival limit (${wbHours} h) exceeded beyond ~${Math.round(lastResult.walkBackDist_m ?? 0)} m: if the rover fails past this point, walking back exceeds suit life support`;
-      el.setAttribute('aria-label', el.title);
-      turnAroundMarkers.push(new Marker({ element: el }).setLngLat(geo.indexToLonLat(lastResult.walkBackCell)).addTo(map));
-    }
+    if (lastResult) {
+      const markerNotes = new Map<number, string[]>();
+      const addThresholdNote = (cell: number | null, text: string) => {
+        if (cell === null) return;
+        const arr = markerNotes.get(cell);
+        if (arr) arr.push(text);
+        else markerNotes.set(cell, [text]);
+      };
 
-    if (
-      lastResult &&
-      lastResult.turnAroundCell !== null &&
-      lastResult.turnAroundCell !== lastResult.walkBackCell
-    ) {
-      const el = document.createElement('div');
-      el.className = 'waypoint turnaround';
-      el.textContent = '!';
-      const limitLabel = traverser.azami_sure_saat ? `${traverser.azami_sure_saat} h` : 'max';
-      el.title = `Max mission duration (${limitLabel}) reached around ${Math.round(lastResult.turnAroundDist_m ?? 0)} m along the route`;
-      el.setAttribute('aria-label', el.title);
-      turnAroundMarkers.push(new Marker({ element: el }).setLngLat(geo.indexToLonLat(lastResult.turnAroundCell)).addTo(map));
+      if (lastResult.walkBackExceeded && lastResult.walkBackCell !== null) {
+        const wbHours = lastResult.walkBackLimit_s ? Number((lastResult.walkBackLimit_s / 3600).toFixed(2)) : 0;
+        addThresholdNote(
+          lastResult.walkBackCell,
+          `Broken condition: time — walk-back survival limit (${wbHours} h) exceeded beyond ~${Math.round(lastResult.walkBackDist_m ?? 0)} m`,
+        );
+      }
+      if (lastResult.radialCapExceeded && lastResult.radialCapCell !== null) {
+        const capKm = lastResult.radialCapLimit_m ? Number((lastResult.radialCapLimit_m / 1000).toFixed(2)) : 10;
+        addThresholdNote(
+          lastResult.radialCapCell,
+          `Broken condition: distance — > ${capKm} km radial standoff cap exceeded beyond ~${Math.round(lastResult.radialCapDist_m ?? 0)} m`,
+        );
+      }
+      if (lastResult.turnAroundCell !== null && lastResult.turnAroundCell !== lastResult.walkBackCell) {
+        const limitLabel = traverser.azami_sure_saat ? `${traverser.azami_sure_saat} h` : 'max';
+        addThresholdNote(
+          lastResult.turnAroundCell,
+          `Broken condition: time — max mission duration (${limitLabel}) reached around ${Math.round(lastResult.turnAroundDist_m ?? 0)} m`,
+        );
+      }
+
+      for (const [cell, notes] of markerNotes) {
+        const el = document.createElement('div');
+        el.className = 'waypoint turnaround';
+        el.textContent = '!';
+        const title = notes.join(' · ');
+        el.title = title;
+        el.setAttribute('aria-label', title);
+        turnAroundMarkers.push(new Marker({ element: el }).setLngLat(geo.indexToLonLat(cell)).addTo(map));
+      }
     }
 
     refreshComparison();
@@ -485,6 +509,7 @@ export function initRoute(
       roundTrip: roundTripInput.checked,
       stopWorkS: currentStopWorkS(),
       allowNoData: allowNoDataInput.checked,
+      assumedTerrainData,
       traverser: toRouterTraverser(traverser),
       walkBack: walkBackSpecFor(traverser),
     });
@@ -924,12 +949,34 @@ export function initRoute(
             stop_work_time_s: Math.round(result.stopTime_s),
             no_data_m: round(result.noDataM, 1),
             caution_m: round(result.cautionM, 1),
+            decision: result.decision,
+            decision_reasons: result.decisionReasons,
+            broken_conditions: result.brokenConditions,
+            max_radial_distance_m: round(result.maxRadialDist_m, 1),
+            ...(result.radialCapLimit_m !== null
+              ? {
+                  radial_cap_m: round(result.radialCapLimit_m, 1),
+                  radial_cap_exceeded: result.radialCapExceeded,
+                  radial_cap_threshold_m: result.radialCapDist_m !== null ? round(result.radialCapDist_m, 1) : null,
+                }
+              : {}),
             ...(result.walkBackLimit_s !== null
               ? {
                   walk_back_limit_s: Math.round(result.walkBackLimit_s),
                   walk_back_exceeded: result.walkBackExceeded,
                   walk_back_threshold_m: result.walkBackDist_m !== null ? round(result.walkBackDist_m, 1) : null,
                 }
+              : {}),
+            ...(traverser.enerji_profili
+              ? (() => {
+                  const e = computeDemoEnergy(result, traverser.enerji_profili);
+                  return {
+                    demo_energy_profile: e.profileName,
+                    demo_energy_used_wh: Math.round(e.usedWh),
+                    demo_energy_remaining_wh: Math.round(e.remainingWh),
+                    demo_energy_reserve_wh: Math.round(e.reserveWh),
+                  };
+                })()
               : {}),
             legs: result.legs.map((leg) => ({
               distance_m: round(leg.distance_m, 1),

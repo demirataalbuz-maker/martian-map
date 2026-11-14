@@ -20,7 +20,7 @@
 //
 // No dependencies: PNG encoding uses Node's built-in zlib.
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
@@ -652,7 +652,10 @@ const mobility = {
     0.6,
   ),
 };
-writeFileSync(join(outDir, 'mobilite_parametreleri.json'), JSON.stringify(mobility, null, 2));
+const mobilityPath = join(outDir, 'mobilite_parametreleri.json');
+if (!existsSync(mobilityPath) || process.argv.includes('--reset-mobility')) {
+  writeFileSync(mobilityPath, JSON.stringify(mobility, null, 2));
+}
 
 const pct = ((100 * nodataCount) / CELLS).toFixed(1);
 const elapsedS = ((performance.now() - tStart) / 1000).toFixed(2);

@@ -737,6 +737,40 @@ body {
 
 /* ---------- results ---------- */
 
+.decision-badge {
+  margin: 6px 0 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  border-radius: 5px;
+  background: rgba(242, 193, 78, 0.1);
+  color: var(--warn);
+  font-size: 0.79rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.decision-badge[data-decision='GO'] {
+  border-color: #6fcf97;
+  background: rgba(111, 207, 151, 0.1);
+  color: #6fcf97;
+}
+
+.decision-badge[data-decision='NO-GO'] {
+  border-color: var(--error);
+  background: rgba(255, 122, 122, 0.12);
+  color: var(--error);
+}
+
+.route-scale-note {
+  margin: 8px 0 4px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--muted);
+  color: var(--text);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .route-legs {
   margin: 4px 0 8px;
   padding-left: 20px;

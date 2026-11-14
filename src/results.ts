@@ -4,7 +4,7 @@
 // route. Charts are plain SVG drawn here (no chart library). Every threshold
 // comes from mobilite_parametreleri.json.
 
-import type { Traverser } from './data';
+import type { EnergyProfile, Traverser } from './data';
 import type { RouteSuccess, TraverserComparisonRow } from './route-types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -43,7 +43,63 @@ export function nearLimitSlope(t: Traverser): number | null {
   return below.length > 0 ? Math.max(...below) : null;
 }
 
+export interface EnergySummary {
+  profileName: string;
+  driveWh: number;
+  baseWh: number;
+  usedWh: number;
+  remainingWh: number;
+  reserveWh: number;
+  usableWh: number;
+  dipsIntoReserve: boolean;
+  elevationIncluded: boolean;
+}
+
+/**
+ * Post-hoc vehicle energy calculation along the already-selected route (Mars Rover Demo v1
+ * physics: uphill mechanical work without regenerative braking + rolling resistance + base load),
+ * leaving A* least-time search untouched.
+ */
+export function computeDemoEnergy(result: RouteSuccess, ep: EnergyProfile): EnergySummary {
+  const elev = result.profileElev;
+  let climbM = 0;
+  if (elev && elev.length === result.profileDist.length) {
+    let prevZ = NaN;
+    for (let i = 0; i < elev.length; i++) {
+      const z = elev[i];
+      if (!Number.isNaN(z) && !Number.isNaN(prevZ) && z > prevZ) {
+        climbM += z - prevZ;
+      }
+      prevZ = z;
+    }
+  }
+  const driveWh =
+    (ep.kutle_kg * ep.yercekimi_m_s2 * (climbM + ep.yuvarlanma_direnci * result.distance_m)) /
+    (ep.verim * 3600);
+  const baseWh = ep.baz_guc_w * (result.time_s / 3600);
+  const usedWh = driveWh + baseWh;
+  const reserveWh = ep.enerji_kapasite_wh * ep.rezerv_orani;
+  const usableWh = ep.enerji_kalan_wh - reserveWh;
+  const remainingWh = ep.enerji_kalan_wh - usedWh;
+  return {
+    profileName: ep.profil_adi_en,
+    driveWh,
+    baseWh,
+    usedWh,
+    remainingWh,
+    reserveWh,
+    usableWh,
+    dipsIntoReserve: remainingWh < reserveWh,
+    elevationIncluded: elev !== null,
+  };
+}
+
 // ------------------------------------------------------------ chart
+
+interface ChartThreshold {
+  x: number;
+  label: string;
+}
 
 interface ChartSpec {
   title: string;
@@ -55,10 +111,8 @@ interface ChartSpec {
   refs?: { y: number; label: string; className: string }[];
   /** Distances of the science stops along the route. */
   stops: number[];
-  /** Optional distance along the route where max mission duration is exceeded. */
-  turnAroundX?: number | null;
-  /** Optional distance along the route where Apollo walk-back survival limit is exceeded. */
-  walkBackX?: number | null;
+  /** Optional safety threshold markers along the route (time / distance caps). */
+  thresholds?: ChartThreshold[];
   /** [from, to] distance spans with no data. */
   gaps: [number, number][];
   includeZero?: boolean;
@@ -120,24 +174,18 @@ function drawChart(spec: ChartSpec): SVGSVGElement {
   for (const stop of spec.stops) {
     root.append(svg('line', { x1: px(stop), x2: px(stop), y1: M.top, y2: M.top + plotH, class: 'chart-stop' }));
   }
-  const hasWalkBackLine = typeof spec.walkBackX === 'number' && Number.isFinite(spec.walkBackX);
-  if (hasWalkBackLine) {
-    const wx = px(spec.walkBackX!);
-    root.append(svg('line', { x1: wx, x2: wx, y1: M.top, y2: M.top + plotH, class: 'chart-turnaround' }));
-    const anchor = wx > M.left + plotW * 0.72 ? 'end' : 'start';
-    const dx = anchor === 'end' ? -3 : 3;
-    root.append(
-      svg('text', { x: wx + dx, y: M.top + 9, class: 'chart-turnaround-label', 'text-anchor': anchor }, 'walk-back'),
-    );
-  }
-  if (typeof spec.turnAroundX === 'number' && Number.isFinite(spec.turnAroundX)) {
-    const tx = px(spec.turnAroundX);
+  const placedXs: number[] = [];
+  for (const th of spec.thresholds ?? []) {
+    if (!Number.isFinite(th.x)) continue;
+    const tx = px(th.x);
     root.append(svg('line', { x1: tx, x2: tx, y1: M.top, y2: M.top + plotH, class: 'chart-turnaround' }));
-    const anchor = tx > M.left + plotW * 0.75 ? 'end' : 'start';
+    const anchor = tx > M.left + plotW * 0.72 ? 'end' : 'start';
     const dx = anchor === 'end' ? -3 : 3;
-    const labelY = hasWalkBackLine && Math.abs(tx - px(spec.walkBackX!)) < 55 ? M.top + 19 : M.top + 9;
+    const closeCount = placedXs.filter((prev) => Math.abs(prev - tx) < 60).length;
+    const labelY = M.top + 9 + closeCount * 10;
+    placedXs.push(tx);
     root.append(
-      svg('text', { x: tx + dx, y: labelY, class: 'chart-turnaround-label', 'text-anchor': anchor }, 'max t'),
+      svg('text', { x: tx + dx, y: labelY, class: 'chart-turnaround-label', 'text-anchor': anchor }, th.label),
     );
   }
   for (const ref of spec.refs ?? []) {
@@ -173,6 +221,7 @@ export function renderResults(
   result: RouteSuccess | null,
   traverser: Traverser,
   slopeBaselineM?: number,
+  cellM?: number,
 ): void {
   root.replaceChildren();
   root.hidden = !result || result.legs.length === 0;
@@ -212,7 +261,15 @@ export function renderResults(
   const slopeGaps = gapsFromSeries(xs, slopes);
   const elevGaps = elev ? gapsFromSeries(xs, elev) : [];
 
+  // GO / CAUTION / NO-GO corridor suitability badge
+  const decisionBadge = el('div', 'decision-badge');
+  decisionBadge.dataset.decision = result.decision;
+  const reasonSummary = result.decisionReasons.join('; ');
+  decisionBadge.textContent = reasonSummary ? `${result.decision}: ${reasonSummary}` : result.decision;
+  root.append(decisionBadge);
+
   // Totals
+  const originLabel = result.mode === 'auto-landing' ? 'Landing' : 'Start';
   const totals = el('dl', 'route-summary');
   const limitHours = traverser.azami_sure_saat;
   const hasLimit = typeof limitHours === 'number' && Number.isFinite(limitHours) && limitHours > 0;
@@ -223,8 +280,18 @@ export function renderResults(
     result.stopTime_s > 0
       ? ` — ${formatDuration(result.travelTime_s)} travel + ${formatDuration(result.stopTime_s)} at stops`
       : '';
+
+  const radialKm = (result.maxRadialDist_m / 1000).toFixed(2);
+  const radialCapKm =
+    result.radialCapLimit_m !== null ? Number((result.radialCapLimit_m / 1000).toFixed(2)) : null;
+  const radialText =
+    radialCapKm !== null
+      ? `${radialKm} km (limit ${radialCapKm} km${result.radialCapExceeded ? ' — broken: distance' : ''})`
+      : `${radialKm} km`;
+
   const rows: [string, string][] = [
     ['Distance', `${Math.round(result.distance_m)} m${result.roundTrip ? ' (round-trip)' : ''}`],
+    [`Max ${originLabel.toLowerCase()} standoff`, radialText],
     ['Estimated time', `${formatDuration(result.time_s)}${limitSuffix}${timeBreakdown}`],
     [
       'Steepest slope',
@@ -235,20 +302,38 @@ export function renderResults(
   if (result.walkBackLimit_s !== null) {
     const wbLimitH = Number((result.walkBackLimit_s / 3600).toFixed(2));
     if (!result.walkBackExceeded && result.maxWalkBackTotal_s !== null && Number.isFinite(result.maxWalkBackTotal_s)) {
-      rows.push(['Walk-back check', `Peak ${formatDuration(result.maxWalkBackTotal_s)} ≤ ${wbLimitH} h suit limit (OK)`]);
+      const remS = Math.max(0, result.walkBackLimit_s - result.maxWalkBackTotal_s);
+      const remPct = Math.max(0, Math.round((remS / result.walkBackLimit_s) * 100));
+      rows.push([
+        'Walk-back check',
+        `Peak ${formatDuration(result.maxWalkBackTotal_s)} ≤ ${wbLimitH} h (min margin ${formatDuration(remS)}, ${remPct}% at ~${Math.round(result.peakWalkBackDist_m ?? 0)} m)`,
+      ]);
     } else if (result.maxWalkBackTotal_s !== null && Number.isFinite(result.maxWalkBackTotal_s)) {
       rows.push([
         'Walk-back check',
-        `Peak ${formatDuration(result.maxWalkBackTotal_s)} > ${wbLimitH} h suit limit (exceeded at ~${Math.round(result.walkBackDist_m ?? 0)} m)`,
+        `Peak ${formatDuration(result.maxWalkBackTotal_s)} > ${wbLimitH} h — broken: time at ~${Math.round(result.walkBackDist_m ?? 0)} m`,
       ]);
     } else {
-      rows.push(['Walk-back check', `Exceeded beyond ~${Math.round(result.walkBackDist_m ?? 0)} m (> ${wbLimitH} h suit limit)`]);
+      rows.push([
+        'Walk-back check',
+        `Unwalkable return > ${wbLimitH} h — broken: time at ~${Math.round(result.walkBackDist_m ?? 0)} m`,
+      ]);
     }
   }
+
+  const demoEnergy = traverser.enerji_profili ? computeDemoEnergy(result, traverser.enerji_profili) : null;
+  if (demoEnergy) {
+    const reserveNote = demoEnergy.dipsIntoReserve ? ' — dips into reserve' : '';
+    const elevNote = !demoEnergy.elevationIncluded ? '; flat-ground lower bound' : '';
+    rows.push([
+      'Energy (demo profile)',
+      `${Math.round(demoEnergy.usedWh)} Wh used · ${Math.round(demoEnergy.remainingWh)} Wh left · ${Math.round(demoEnergy.reserveWh)} Wh reserve (${demoEnergy.profileName}${reserveNote}${elevNote})`,
+    ]);
+  }
+
   for (const [term, value] of rows) totals.append(el('dt', undefined, term), el('dd', undefined, value));
   root.append(totals);
 
-  const originLabel = result.mode === 'auto-landing' ? 'Landing' : 'Start';
   if (result.legs.length >= 1) {
     const stopCount = result.roundTrip ? result.legs.length - 1 : result.legs.length;
     const legs = el('ol', 'route-legs');
@@ -276,16 +361,35 @@ export function renderResults(
   if (result.walkBackExceeded && result.walkBackLimit_s !== null) {
     const wbLimitH = Number((result.walkBackLimit_s / 3600).toFixed(2));
     warnings.push(
-      `Walk-back survival limit (${wbLimitH} h) exceeded beyond ~${Math.round(result.walkBackDist_m ?? 0)} m (marked "!" on the map; dashed red segment): if the rover fails past this point, walking back to the ${originLabel.toLowerCase()} exceeds suit life support or is blocked by steeper terrain.`,
+      `Beyond ~${Math.round(result.walkBackDist_m ?? 0)} m ("!" on the map; dashed red segment), if the rover fails, walking back is not viable — broken condition: time (elapsed + walk-back exceeds ${wbLimitH} h suit limit or return is blocked by steeper terrain).`,
+    );
+  }
+  if (result.radialCapExceeded && radialCapKm !== null) {
+    warnings.push(
+      `Beyond ~${Math.round(result.radialCapDist_m ?? 0)} m ("!" on the map; dashed red segment), straight-line distance from ${originLabel.toLowerCase()} reaches ${radialKm} km — broken condition: distance (> ${radialCapKm} km radial standoff cap).`,
     );
   }
   if (hasLimit && result.time_s > limitHours * 3600) {
     const turnNote =
       result.turnAroundDist_m !== null
-        ? ` Budget is exhausted around ${Math.round(result.turnAroundDist_m)} m along the route (marked "!" on the map).`
+        ? ` Budget is exhausted around ${Math.round(result.turnAroundDist_m)} m along the route (marked "!" on the map; dashed red segment).`
         : '';
     warnings.push(
-      `Estimated mission time ${formatDuration(result.time_s)} exceeds the ${limitHours} h maximum for "${traverser.ad_en}".${turnNote}`,
+      `Estimated mission time ${formatDuration(result.time_s)} exceeds the ${limitHours} h maximum for "${traverser.ad_en}" — broken condition: time.${turnNote}`,
+    );
+  }
+  if (
+    result.brokenConditions.length === 0 &&
+    result.minMarginRatio !== null &&
+    result.minMarginRatio < 0.1
+  ) {
+    warnings.push(
+      `Safety time margin drops below 10% (${Math.max(0, Math.round(result.minMarginRatio * 100))}% remaining at the tightest point).`,
+    );
+  }
+  if (demoEnergy && demoEnergy.dipsIntoReserve) {
+    warnings.push(
+      `Demo vehicle energy (${demoEnergy.profileName}): estimated ${Math.round(demoEnergy.usedWh)} Wh exceeds the ${Math.round(demoEnergy.usableWh)} Wh usable allowance before the ${Math.round(demoEnergy.reserveWh)} Wh reserve (post-hoc summary; route search is least-time).`,
     );
   }
   if (near !== null && nearLimitM > 0) {
@@ -302,7 +406,7 @@ export function renderResults(
     warnings.push(`The route crosses about ${Math.max(1, Math.round(result.cautionM))} m of terrain marked "caution".`);
   }
   const list = el('ul', 'route-warnings');
-  if (warnings.length === 0) list.append(el('li', 'ok', 'No warnings for this route.'));
+  if (warnings.length === 0) list.append(el('li', 'ok', 'No route warnings beyond dataset-level assumptions above.'));
   for (const text of warnings) list.append(el('li', undefined, text));
   root.append(list);
 
@@ -313,6 +417,17 @@ export function renderResults(
     along += leg.distance_m;
     stops.push(along);
   }
+  const thresholds: ChartThreshold[] = [];
+  if (result.walkBackExceeded && result.walkBackDist_m !== null) {
+    thresholds.push({ x: result.walkBackDist_m, label: 'time (walk-back)' });
+  }
+  if (result.radialCapExceeded && result.radialCapDist_m !== null) {
+    thresholds.push({ x: result.radialCapDist_m, label: `dist (${radialCapKm ?? 10} km)` });
+  }
+  if (result.turnAroundDist_m !== null && result.turnAroundDist_m !== result.walkBackDist_m) {
+    thresholds.push({ x: result.turnAroundDist_m, label: 'time (max)' });
+  }
+
   const charts = el('div', 'charts');
   if (elev) {
     charts.append(
@@ -323,8 +438,7 @@ export function renderResults(
         ys: elev,
         total: result.distance_m,
         stops,
-        turnAroundX: result.turnAroundDist_m,
-        walkBackX: result.walkBackExceeded ? result.walkBackDist_m : null,
+        thresholds,
         gaps: elevGaps,
       }),
     );
@@ -342,14 +456,22 @@ export function renderResults(
       ys: slopes,
       total: result.distance_m,
       stops,
-      turnAroundX: result.turnAroundDist_m,
-      walkBackX: result.walkBackExceeded ? result.walkBackDist_m : null,
+      thresholds,
       gaps: slopeGaps,
       refs,
       includeZero: true,
     }),
   );
   root.append(charts);
+
+  const scaleM = typeof cellM === 'number' && Number.isFinite(cellM) && cellM > 0 ? cellM : 20;
+  root.append(
+    el(
+      'p',
+      'route-scale-note',
+      `Computed with ${scaleM} m resolution data; obstacles smaller than this scale were not evaluated.`,
+    ),
+  );
 
   const timeBasis = result.roundTrip
     ? result.stopTime_s > 0
@@ -359,9 +481,15 @@ export function renderResults(
     ? 'Time includes one-way travel and work time at science stops (no return leg).'
     : 'Time is one-way travel only (no time at stops, no return).';
   const baselineNote = hasBaseline
-    ? `Terrain slope is ceiling-quantized over a ${slopeBaselineM} m baseline. Speed depends on slope magnitude only; uphill and downhill are treated the same.`
-    : 'Speed depends on slope magnitude only; uphill and downhill are treated the same.';
-  root.append(el('p', 'route-note', `${timeBasis} ${baselineNote} Grey spans in the charts have no data.`));
+    ? `Terrain slope is ceiling-quantized over a ${slopeBaselineM} m baseline.`
+    : '';
+  root.append(
+    el(
+      'p',
+      'route-note',
+      `${timeBasis} ${baselineNote} Model boundaries: speed depends on slope magnitude only (no directed uphill/downhill search), stops are visited in user-selected order (no TSP reordering), and turn-angle penalties are omitted. Grey spans in the charts have no data.`,
+    ),
+  );
 }
 
 export function renderComparison(
@@ -396,14 +524,21 @@ export function renderComparison(
       tr.append(el('td', undefined, `${Math.round(row.distance_m ?? 0)} m`));
       tr.append(el('td', undefined, formatDuration(row.time_s ?? 0)));
       tr.append(el('td', undefined, `${(row.maxSlope_deg ?? 0).toFixed(1)}°`));
-      if (row.withinLimit === false) {
-        tr.append(el('td', 'compare-status-warn', 'Exceeds max time'));
-      } else if (row.walkBackExceeded) {
-        tr.append(el('td', 'compare-status-warn', 'Exceeds walk-back'));
-      } else if (row.marginalLanding) {
-        tr.append(el('td', 'compare-status-warn', 'Marginal landing'));
+      const decision = row.decision ?? 'CAUTION';
+      const detailTitle = row.decisionReasons?.length ? `${decision}: ${row.decisionReasons.join('; ')}` : decision;
+      if (decision === 'NO-GO') {
+        const broken = row.brokenConditions?.length ? ` (${row.brokenConditions.join(', ')})` : '';
+        const td = el('td', 'compare-status-bad', `NO-GO${broken}`);
+        td.title = detailTitle;
+        tr.append(td);
+      } else if (decision === 'CAUTION') {
+        const td = el('td', 'compare-status-warn', 'CAUTION');
+        td.title = detailTitle;
+        tr.append(td);
       } else {
-        tr.append(el('td', 'compare-status-ok', 'OK'));
+        const td = el('td', 'compare-status-ok', 'GO');
+        td.title = detailTitle;
+        tr.append(td);
       }
     } else {
       tr.append(el('td', undefined, '—'));

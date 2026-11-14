@@ -12,11 +12,13 @@
 
 import type {
   BlockReason,
+  BrokenCondition,
   FromWorker,
   LandingCandidate,
   RouteFailure,
   RouteLeg,
   RouterTraverser,
+  SafetyDecision,
   ToWorker,
   TraverserComparisonRow,
   WalkBackSpec,
@@ -833,25 +835,10 @@ function computeWalkBackTimes(
   const oCol = originCell % width;
   const oRow = (originCell - oCol) / width;
   const gridSpan = Math.max(width, height);
-  const searchCapS = clipAtLimit ? limitS : limitS * 6;
+  const searchCapS = clipAtLimit ? limitS : limitS * 1.5;
 
-  let maxPassableCheb = 0;
-  for (let k = 0; k < full.length; k++) {
-    const c = full[k];
-    if (c === originCell || cellSpeedAt(c) === 0) continue;
-    const cc = c % width;
-    const cr = (c - cc) / width;
-    const cheb = Math.max(Math.abs(cc - oCol), Math.abs(cr - oRow));
-    if (cheb > maxPassableCheb) maxPassableCheb = cheb;
-  }
-
-  const maxRangeCells = Number.isFinite(limitS)
-    ? clipAtLimit
-      ? Math.max(1, Math.min(gridSpan, Math.ceil((maxSpeed * limitS) / cellM) + 2))
-      : Math.max(
-          1,
-          Math.min(gridSpan, Math.max(maxPassableCheb * 2 + 128, Math.ceil((maxSpeed * limitS * 2) / cellM) + 16)),
-        )
+  const maxRangeCells = Number.isFinite(searchCapS)
+    ? Math.max(1, Math.min(gridSpan, Math.ceil((maxSpeed * searchCapS) / cellM) + 4))
     : gridSpan;
 
   const targetCells = new Set<number>();
@@ -959,7 +946,12 @@ function computeWalkBackTimes(
       }
     }
 
-    if (allTargetsOptimal || atMaxWindow || firstUnclippedBorderTime === Infinity) {
+    if (
+      allTargetsOptimal ||
+      atMaxWindow ||
+      firstUnclippedBorderTime === Infinity ||
+      firstUnclippedBorderTime > searchCapS
+    ) {
       for (let k = 0; k < full.length; k++) {
         const c = full[k];
         if (c === originCell) out[k] = 0;
@@ -1112,6 +1104,60 @@ function planMission(
   };
 }
 
+function evaluateDecision(params: {
+  exceededMaxTime: boolean;
+  walkBackExceeded: boolean;
+  radialCapExceeded: boolean;
+  radialCapLimitM: number | null;
+  minMarginRatio: number | null;
+  assumedTerrainData: boolean;
+  noDataCells: number;
+  cautionCells: number;
+  marginalLanding: boolean;
+}): {
+  brokenConditions: BrokenCondition[];
+  decision: SafetyDecision;
+  decisionReasons: string[];
+} {
+  const brokenConditions: BrokenCondition[] = [];
+  if (params.exceededMaxTime || params.walkBackExceeded) brokenConditions.push('time');
+  if (params.radialCapExceeded) brokenConditions.push('distance');
+
+  if (brokenConditions.length > 0) {
+    const reasons: string[] = [];
+    if (params.walkBackExceeded) reasons.push('walk-back survival time limit exceeded (broken: time)');
+    if (params.exceededMaxTime) reasons.push('max mission duration exceeded (broken: time)');
+    if (params.radialCapExceeded) {
+      const capKm = params.radialCapLimitM !== null ? Number((params.radialCapLimitM / 1000).toFixed(2)) : 10;
+      reasons.push(`radial standoff > ${capKm} km from base (broken: distance)`);
+    }
+    return { brokenConditions, decision: 'NO-GO', decisionReasons: reasons };
+  }
+
+  const cautionReasons: string[] = [];
+  if (params.minMarginRatio !== null && params.minMarginRatio < 0.1) {
+    const pct = Math.max(0, Math.round(params.minMarginRatio * 100));
+    cautionReasons.push(`safety time margin < 10% (${pct}% remaining)`);
+  }
+  if (params.noDataCells > 0) {
+    cautionReasons.push('route crosses unmapped no-data terrain');
+  }
+  if (params.cautionCells > 0) {
+    cautionReasons.push('route crosses caution hazard terrain');
+  }
+  if (params.marginalLanding) {
+    cautionReasons.push('marginal (class 1) landing site');
+  }
+  if (params.assumedTerrainData) {
+    cautionReasons.push('rock and thermal inertia data not available (assumed)');
+  }
+
+  if (cautionReasons.length > 0) {
+    return { brokenConditions, decision: 'CAUTION', decisionReasons: cautionReasons };
+  }
+  return { brokenConditions, decision: 'GO', decisionReasons: ['all evaluated corridor checks passed'] };
+}
+
 let latestRouteId = 0;
 
 async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
@@ -1121,6 +1167,7 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
   const roundTrip = msg.roundTrip === true;
   const stopWorkS = msg.stopWorkS ?? 0;
   const allowNoData = msg.allowNoData === true;
+  const assumedTerrainData = msg.assumedTerrainData !== false;
 
   try {
     const willComputeLeg =
@@ -1172,7 +1219,22 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
       typeof msg.traverser.maxTimeS === 'number' && Number.isFinite(msg.traverser.maxTimeS) && msg.traverser.maxTimeS > 0
         ? msg.traverser.maxTimeS
         : null;
+    const radialCapLimit_m =
+      typeof msg.traverser.maxRadialDistM === 'number' &&
+      Number.isFinite(msg.traverser.maxRadialDistM) &&
+      msg.traverser.maxRadialDistM > 0
+        ? msg.traverser.maxRadialDistM
+        : null;
     const perStopS = Math.max(0, Number.isFinite(stopWorkS) ? stopWorkS : 0);
+
+    const originCell = full.length > 0 ? full[0] : 0;
+    const oCol = originCell % width;
+    const oRow = (originCell - oCol) / width;
+    const radialDist = new Float64Array(full.length);
+    let maxRadialDist_m = 0;
+    let radialCapExceeded = false;
+    let radialCapCell: number | null = null;
+    let radialCapDist_m: number | null = null;
 
     let along = 0;
     let cumTime = 0;
@@ -1206,6 +1268,18 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
       if (profileElev) {
         profileElev[k] = elevMetresAt(cell);
       }
+
+      const cCol = cell % width;
+      const cRow = (cell - cCol) / width;
+      const rM = Math.hypot(cCol - oCol, cRow - oRow) * cellM;
+      radialDist[k] = rM;
+      if (rM > maxRadialDist_m) maxRadialDist_m = rM;
+      if (!radialCapExceeded && radialCapLimit_m !== null && planned.legs.length > 0 && rM > radialCapLimit_m) {
+        radialCapExceeded = true;
+        const rIdx = k > 0 ? k - 1 : 0;
+        radialCapCell = full[rIdx];
+        radialCapDist_m = profileDist[rIdx];
+      }
     }
 
     const exceededLimit = maxTimeS !== null && planned.legs.length > 0 && planned.time_s > maxTimeS;
@@ -1228,6 +1302,7 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
         : null;
     let walkBackLimit_s: number | null = null;
     let maxWalkBackTotal_s: number | null = null;
+    let peakWalkBackDist_m: number | null = null;
     let walkBackExceeded = false;
     let walkBackCell: number | null = null;
     let walkBackDist_m: number | null = null;
@@ -1236,10 +1311,13 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
     if (activeWalkBack && planned.legs.length > 0 && full.length > 0) {
       walkBackLimit_s = activeWalkBack.limitS;
       walkTimes = computeWalkBackTimes(full[0], full, activeWalkBack, allowNoData);
-      let peakTotal = 0;
+      let peakTotal = -1;
       for (let k = 0; k < full.length; k++) {
         const totalAfter = cumAfterStop[k] + walkTimes[k];
-        if (totalAfter > peakTotal) peakTotal = totalAfter;
+        if (totalAfter > peakTotal) {
+          peakTotal = totalAfter;
+          peakWalkBackDist_m = profileDist[k];
+        }
         if (!walkBackExceeded && totalAfter > walkBackLimit_s) {
           walkBackExceeded = true;
           const wbIdx = cumArrival[k] + walkTimes[k] > walkBackLimit_s && k > 0 ? k - 1 : k;
@@ -1247,16 +1325,40 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
           walkBackDist_m = profileDist[wbIdx];
         }
       }
-      maxWalkBackTotal_s = peakTotal;
+      maxWalkBackTotal_s = peakTotal >= 0 ? peakTotal : 0;
     }
 
+    let minMarginRatio: number | null = null;
+    if (planned.legs.length > 0) {
+      if (walkBackLimit_s !== null && maxWalkBackTotal_s !== null) {
+        minMarginRatio = (walkBackLimit_s - maxWalkBackTotal_s) / walkBackLimit_s;
+      }
+      if (maxTimeS !== null) {
+        const missionMargin = (maxTimeS - planned.time_s) / maxTimeS;
+        minMarginRatio = minMarginRatio === null ? missionMargin : Math.min(minMarginRatio, missionMargin);
+      }
+    }
+
+    const { brokenConditions, decision, decisionReasons } = evaluateDecision({
+      exceededMaxTime: exceededLimit,
+      walkBackExceeded,
+      radialCapExceeded,
+      radialCapLimitM: radialCapLimit_m,
+      minMarginRatio,
+      assumedTerrainData,
+      noDataCells,
+      cautionCells,
+      marginalLanding: planned.marginalLanding,
+    });
+
     let unsafeMask: Uint8Array | null = null;
-    if ((exceededLimit || walkBackExceeded) && full.length > 0) {
+    if ((exceededLimit || walkBackExceeded || radialCapExceeded) && full.length > 0) {
       unsafeMask = new Uint8Array(full.length);
       for (let k = 0; k < full.length; k++) {
         const overTime = maxTimeS !== null && cumAfterStop[k] > maxTimeS;
         const overWalk = walkBackLimit_s !== null && walkTimes !== null && cumAfterStop[k] + walkTimes[k] > walkBackLimit_s;
-        if (overTime || overWalk) unsafeMask[k] = 1;
+        const overDist = radialCapLimit_m !== null && radialDist[k] > radialCapLimit_m;
+        if (overTime || overWalk || overDist) unsafeMask[k] = 1;
       }
     }
 
@@ -1284,9 +1386,19 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
         turnAroundDist_m,
         walkBackLimit_s,
         maxWalkBackTotal_s,
+        peakWalkBackDist_m,
         walkBackExceeded,
         walkBackCell,
         walkBackDist_m,
+        maxRadialDist_m,
+        radialCapLimit_m,
+        radialCapExceeded,
+        radialCapCell,
+        radialCapDist_m,
+        minMarginRatio,
+        brokenConditions,
+        decision,
+        decisionReasons,
         unsafeMask,
         profileDist,
         profileSlope,
@@ -1307,6 +1419,8 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
 
 function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
   if ((!slopeU8 && !slopeF32) || !hazard) return;
+  const haz = hazard;
+  const assumedTerrainData = msg.assumedTerrainData !== false;
   try {
     const rows: TraverserComparisonRow[] = msg.entries.map((entry) => {
       const res = planMission(
@@ -1338,18 +1452,46 @@ function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
       }
 
       let maxSlope = 0;
+      let noDataCells = 0;
+      let cautionCells = 0;
+      const oCell = res.full.length > 0 ? res.full[0] : 0;
+      const oCol = oCell % width;
+      const oRow = (oCell - oCol) / width;
+      const radialCapLimitM =
+        typeof entry.traverser.maxRadialDistM === 'number' &&
+        Number.isFinite(entry.traverser.maxRadialDistM) &&
+        entry.traverser.maxRadialDistM > 0
+          ? entry.traverser.maxRadialDistM
+          : null;
+      let radialCapExceeded = false;
+
       for (const cell of res.full) {
-        if (!isNoData(cell)) {
+        if (isNoData(cell)) noDataCells++;
+        else {
           const s = slopeDegAt(cell);
           if (s > maxSlope) maxSlope = s;
         }
+        if (haz[cell] === HAZARD_CAUTION) cautionCells++;
+        if (!radialCapExceeded && radialCapLimitM !== null && res.legs.length > 0) {
+          const cc = cell % width;
+          const cr = (cell - cc) / width;
+          if (Math.hypot(cc - oCol, cr - oRow) * cellM > radialCapLimitM) {
+            radialCapExceeded = true;
+          }
+        }
       }
-      const withinLimit =
-        entry.traverser.maxTimeS === null || !Number.isFinite(entry.traverser.maxTimeS)
-          ? true
-          : res.time_s <= entry.traverser.maxTimeS;
+
+      const maxTimeS =
+        typeof entry.traverser.maxTimeS === 'number' && Number.isFinite(entry.traverser.maxTimeS) && entry.traverser.maxTimeS > 0
+          ? entry.traverser.maxTimeS
+          : null;
+      const withinLimit = maxTimeS === null ? true : res.time_s <= maxTimeS;
+      const exceededMaxTime = !withinLimit && res.legs.length > 0;
 
       let walkBackExceeded = false;
+      let minMarginRatio: number | null =
+        maxTimeS !== null && res.legs.length > 0 ? (maxTimeS - res.time_s) / maxTimeS : null;
+
       if (
         entry.walkBack &&
         typeof entry.walkBack.limitS === 'number' &&
@@ -1376,13 +1518,30 @@ function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
           cumAfter[k] = t;
         }
         const wbTimes = computeWalkBackTimes(res.full[0], res.full, entry.walkBack, msg.allowNoData, true);
+        let peakWb = 0;
         for (let k = 0; k < res.full.length; k++) {
-          if (cumAfter[k] + wbTimes[k] > entry.walkBack.limitS) {
+          const tot = cumAfter[k] + wbTimes[k];
+          if (tot > peakWb) peakWb = tot;
+          if (tot > entry.walkBack.limitS) {
             walkBackExceeded = true;
             break;
           }
         }
+        const wbMargin = walkBackExceeded ? -1 : (entry.walkBack.limitS - peakWb) / entry.walkBack.limitS;
+        minMarginRatio = minMarginRatio === null ? wbMargin : Math.min(minMarginRatio, wbMargin);
       }
+
+      const { brokenConditions, decision, decisionReasons } = evaluateDecision({
+        exceededMaxTime,
+        walkBackExceeded,
+        radialCapExceeded,
+        radialCapLimitM,
+        minMarginRatio,
+        assumedTerrainData,
+        noDataCells,
+        cautionCells,
+        marginalLanding: res.marginalLanding,
+      });
 
       return {
         id: entry.id,
@@ -1395,6 +1554,10 @@ function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
         maxSlope_deg: maxSlope,
         withinLimit,
         walkBackExceeded,
+        radialCapExceeded,
+        brokenConditions,
+        decision,
+        decisionReasons,
         marginalLanding: res.marginalLanding,
       };
     });
