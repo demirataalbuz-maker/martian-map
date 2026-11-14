@@ -1,0 +1,614 @@
+<!doctype html>
+<!-- AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team. -->
+<!-- Pure HTML/CSS/SVG presentation & 27-30s video end card (zero AI-generated imagery, zero NASA/USGS logos). -->
+<!-- NOTE: Update the end-card credit line (#endcard-data-credit) and Slide 4 table to exact shipped products once real data is locked. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marswalk Map — Video End Card &amp; 7-Slide Deck</title>
+    <style>
+      :root {
+        --bg: #14100e;
+        --panel: #1f1815;
+        --line: #4a3a31;
+        --text: #f3e9e2;
+        --muted: #b9a79b;
+        --accent: #e8824a;
+        --route: #4fd8ff;
+        --ok: #6fcf97;
+        --warn: #f2c14e;
+        --bad: #ff7a7a;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: #0c0908;
+        color: var(--text);
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(20, 16, 14, 0.96);
+        font-size: 0.85rem;
+      }
+
+      .toolbar button {
+        padding: 6px 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .toolbar button.active {
+        border-color: var(--accent);
+        background: rgba(232, 130, 74, 0.2);
+      }
+
+      .toolbar .hint {
+        margin-left: auto;
+        color: var(--muted);
+      }
+
+      .deck {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 28px;
+        padding: 24px;
+      }
+
+      .slide {
+        position: relative;
+        width: min(1280px, 95vw);
+        aspect-ratio: 16 / 9;
+        padding: 48px 58px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background:
+          radial-gradient(circle at 84% 22%, rgba(232, 130, 74, 0.14), transparent 44%),
+          radial-gradient(circle at 18% 82%, rgba(79, 216, 255, 0.08), transparent 42%),
+          var(--bg);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow: hidden;
+      }
+
+      body.endcard-only .slide:not(.endcard) {
+        display: none;
+      }
+
+      body.endcard-only .toolbar {
+        display: none;
+      }
+
+      body.endcard-only .deck {
+        padding: 0;
+      }
+
+      body.endcard-only .slide.endcard {
+        width: 100vw;
+        height: 100vh;
+        border: 0;
+        border-radius: 0;
+      }
+
+      .slide-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 10px 0 12px;
+        font-size: clamp(2.1rem, 3.6vw, 3.4rem);
+        line-height: 1.08;
+      }
+
+      h2 {
+        margin: 8px 0 14px;
+        font-size: clamp(1.5rem, 2.4vw, 2.15rem);
+        line-height: 1.15;
+      }
+
+      p.lead {
+        max-width: 860px;
+        margin: 0;
+        color: var(--muted);
+        font-size: clamp(1rem, 1.45vw, 1.28rem);
+        line-height: 1.45;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin: auto 0;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin: auto 0;
+      }
+
+      .card {
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(31, 24, 21, 0.88);
+      }
+
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 1.02rem;
+        color: var(--text);
+      }
+
+      .card p,
+      .card li {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.42;
+      }
+
+      .card ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .card li + li {
+        margin-top: 6px;
+      }
+
+      table.data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: auto 0;
+        font-size: 0.82rem;
+      }
+
+      table.data-table th,
+      table.data-table td {
+        padding: 10px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      table.data-table th {
+        color: var(--accent);
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      table.data-table td strong {
+        color: var(--text);
+      }
+
+      table.data-table td {
+        color: var(--muted);
+      }
+
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 12px;
+        border-top: 1px solid rgba(74, 58, 49, 0.65);
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+      }
+
+      .pill.ok {
+        background: rgba(111, 207, 151, 0.18);
+        color: var(--ok);
+      }
+
+      .pill.route {
+        background: rgba(79, 216, 255, 0.18);
+        color: var(--route);
+      }
+
+      .pill.warn {
+        background: rgba(242, 193, 78, 0.18);
+        color: var(--warn);
+      }
+
+      /* ---------- 27-30s Video End Card ---------- */
+      .endcard-center {
+        margin: auto;
+        text-align: center;
+        max-width: 920px;
+      }
+
+      .emblem {
+        width: 92px;
+        height: 92px;
+        margin: 0 auto 18px;
+      }
+
+      .url-box {
+        display: inline-block;
+        margin-top: 22px;
+        padding: 12px 24px;
+        border: 1.5px solid var(--route);
+        border-radius: 999px;
+        background: rgba(79, 216, 255, 0.1);
+        color: var(--text);
+        font-size: clamp(1.05rem, 1.7vw, 1.45rem);
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .credit-line {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 0.95rem;
+        letter-spacing: 0.03em;
+      }
+
+      @media print {
+        @page {
+          size: 1280px 720px;
+          margin: 0;
+        }
+        body {
+          background: var(--bg);
+        }
+        .toolbar,
+        .slide.endcard {
+          display: none !important;
+        }
+        .deck {
+          padding: 0;
+          gap: 0;
+        }
+        .slide {
+          width: 1280px;
+          height: 720px;
+          border: 0;
+          border-radius: 0;
+          page-break-after: always;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <button id="btn-all" type="button" class="active">End Card + 7 Slides</button>
+      <button id="btn-endcard" type="button">Fullscreen 27–30s Video End Card (ESC to exit)</button>
+      <button id="btn-print" type="button">Print 7-Slide PDF (Ctrl+P)</button>
+      <span class="hint">100% Pure Vector SVG/CSS · Zero AI Imagery · Zero NASA/USGS Logos</span>
+    </div>
+
+    <div class="deck">
+      <!-- ==================== VIDEO END CARD (27-30s) ==================== -->
+      <section class="slide endcard" aria-label="Video End Card (27 to 30 seconds)">
+        <div class="endcard-center">
+          <!-- Pure hand-coded geometric SVG emblem: contour rings + Landing L -> Science Target route -->
+          <svg class="emblem" viewBox="0 0 100 100" role="img" aria-label="Marswalk Map geometric emblem">
+            <circle cx="50" cy="50" r="46" fill="#1f1815" stroke="#e8824a" stroke-width="2.5" />
+            <ellipse cx="50" cy="54" rx="34" ry="22" fill="none" stroke="#4a3a31" stroke-width="1.5" />
+            <ellipse cx="52" cy="52" rx="22" ry="13" fill="none" stroke="#4a3a31" stroke-width="1.5" />
+            <path d="M 26 66 Q 44 62, 52 46 T 73 31" fill="none" stroke="#4fd8ff" stroke-width="4" stroke-linecap="round" />
+            <circle cx="26" cy="66" r="8" fill="#6fcf97" stroke="#14100e" stroke-width="2" />
+            <rect x="67" y="25" width="11" height="11" rx="2" transform="rotate(45 72.5 30.5)" fill="#ffd166" stroke="#14100e" stroke-width="2" />
+          </svg>
+          <div class="slide-tag">NASA Space Apps Challenge 2026 · Interplanetary Survival Guide: Martian Map</div>
+          <h1>Marswalk Map</h1>
+          <p class="lead" style="margin: 0 auto">
+            Target-First Safe Landing &amp; Surface Traverse Planner for Mars Missions
+          </p>
+          <div class="url-box">demirataalbuz-maker.github.io/martian-map</div>
+          <p id="endcard-data-credit" class="credit-line">
+            Built on open planetary archives: NASA PDS · JPL-Caltech · USGS Astrogeology · Arizona State University<br />
+            Open-Source (Apache-2.0) · Static Web App · No Login Required
+          </p>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 1 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 1 / 7 · Title &amp; Core Shift</span>
+          <h1>Marswalk Map</h1>
+          <p class="lead">
+            Target-first landing site recommendation and obstacle-avoiding EVA route planner over a 20 m Mars terrain grid.
+          </p>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <h3>1. Tap the Science Target</h3>
+            <p>Instead of guessing an arbitrary start pin, planners select the geological stop they want to investigate.</p>
+          </div>
+          <div class="card">
+            <h3>2. Recommend Safe Landing</h3>
+            <p>Reverse Dijkstra finds the closest safe landing zone (<span class="pill ok">L</span>) plus separated backups (<span class="pill warn">B1 / B2</span>).</p>
+          </div>
+          <div class="card">
+            <h3>3. Plan &amp; Verify the EVA</h3>
+            <p>Plots least-time <span class="pill route">8-connected A*</span> routes, round-trip return legs, and SVG slope/elevation profiles.</p>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>Live App: demirataalbuz-maker.github.io/martian-map</span>
+          <span>Challenge: Interplanetary Survival Guide — Martian Map</span>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 2 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 2 / 7 · The Operational Challenge</span>
+          <h2>Three Coupled Constraints Govern Every Mars Excursion</h2>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <h3>Lander Footprint Geometry</h3>
+            <ul>
+              <li>A lander requires an entire hazard-free circle (<code>guvenli_alan_capi_m</code>), not just one flat pixel.</li>
+              <li>Primary and backup landing sites must be spatially separated so a single local scarp or boulder field cannot invalidate all options.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Vehicle-Specific Mobility</h3>
+            <ul>
+              <li>Suited astronauts, crewed rovers, and robotic rovers obey distinct slope limits, obstacle clearances, and speed-vs-slope curves.</li>
+              <li>Steep scarps and boulder fields require automatic corridor detours.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Life-Support &amp; Walk-Back</h3>
+            <ul>
+              <li>Human EVAs have hard consumable caps (<code>azami_sure_saat</code>) including science work time at stops.</li>
+              <li>Crewed rovers are bounded by the <em>walk-back survival rule</em> if the vehicle fails at the farthest stop.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>Marswalk Map</span>
+          <span>2 / 7</span>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 3 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 3 / 7 · Target-First Workflow &amp; Three Traversers</span>
+          <h2>One Mission, Three Traversers, Real Return-Leg Verification</h2>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Mission Capabilities</h3>
+            <ul>
+              <li><strong>Auto-Landing + Backups:</strong> Prioritizes class-0 suitable zones within range; falls back to class-1 marginal sites only with an explicit warning.</li>
+              <li><strong>True Round-Trip Check:</strong> Computes the actual A* return path from the last stop to landing/start and places a <code>!</code> turn-around marker where budget runs out.</li>
+              <li><strong>Resilient UX:</strong> Clicking an unreachable target preserves the active route and reports why even when the side panel is collapsed.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Side-by-Side Traverser Comparison</h3>
+            <ul>
+              <li><strong>Walking Astronaut (suited):</strong> High maneuverability on moderate slopes, strict EVA life-support duration limit.</li>
+              <li><strong>Crewed Rover:</strong> Fast flat-ground transit, tighter slope ceiling, range capped by walk-back safety.</li>
+              <li><strong>Uncrewed Rover:</strong> Robotic exploration without human consumable time limits; click any row to switch instantly.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>Marswalk Map</span>
+          <span>3 / 7</span>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 4 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 4 / 7 · Data &amp; Sources</span>
+          <h2>Planetary Datasets, Citations &amp; Open Licenses (Jezero–Northeast)</h2>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Dataset &amp; Scale</th>
+              <th>Role in Pipeline</th>
+              <th>Citation / Provenance</th>
+              <th>License</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>USGS MRO CTX DEM (20 m) &amp; Mosaic (~5 m)</strong></td>
+              <td><code>86.1 × 107.5 km</code> (<code>4300 × 5375</code>) elevation, ceiling-quantized 20 m slope, regional tiles (<code>z8–z14</code>).</td>
+              <td>Fergason et al. (2020), <em>Mars 2020 TRN CTX DTM &amp; Orthoimage Mosaics</em>, USGS Astrogeology. DOI: <code>10.5066/P906QQT8</code>.</td>
+              <td>U.S. Public Domain (<code>CC0 1.0</code>)</td>
+            </tr>
+            <tr>
+              <td><strong>MRO HiRISE DTM (1 m) &amp; Orthoimage (0.25 m)</strong></td>
+              <td>Meter-scale boulder/scarp hazard &amp; landing validation and core-area detail tiles (<code>z15–z16</code>).</td>
+              <td>Fergason et al. (2020), USGS DOIs <code>10.5066/P9REJ9JN</code> &amp; <code>10.5066/P9QJDP48</code>; MRO HiRISE (McEwen et al., Univ. of Arizona).</td>
+              <td>U.S. Public Domain (<code>CC0 1.0</code>)</td>
+            </tr>
+            <tr>
+              <td><strong>Mars Odyssey THEMIS Thermal Inertia (~100 m)</strong></td>
+              <td>Thermophysical dust/sand vs. bedrock surface hazard &amp; landing screening.</td>
+              <td>Christensen et al. (2004); Fergason et al. (2006, <code>10.1029/2006JE002735</code>), ASU Mars Space Flight Facility &amp; NASA PDS.</td>
+              <td>NASA PDS Open Archive (Public Domain)</td>
+            </tr>
+            <tr>
+              <td><strong>Mars 2020 Perseverance Traverse</strong></td>
+              <td>Ground-truth reference science stops (<code>duraklar.json</code>) and surface context in Jezero Crater.</td>
+              <td>Deen, R. G. (Ed.) (2022–2026), <em>Mars 2020 Rover PLACES Bundle</em>, NASA/JPL-Caltech PDS Geosciences. DOI: <code>10.17189/btz6-5a82</code>.</td>
+              <td>U.S. Public Domain (NASA Open Data)</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="slide-foot">
+          <span>Study Box: 76.667–78.198° E, 17.586–19.400° N (~23.1M cells at 20 m)</span>
+          <span>4 / 7</span>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 5 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 5 / 7 · Physical Honesty &amp; Safety Architecture</span>
+          <h2>True Mars Grid Math, Strict No-Data Safety &amp; Zero Backend</h2>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <h3>Mars Grid Geometry</h3>
+            <ul>
+              <li>Zero Earth basemap tiles or Earth-radius formulas.</li>
+              <li>All distances, times, warning spans, and the custom scale bar come from <code>hucre_m</code> (diagonal <code>× √2</code>).</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>"No Data" ≠ "Forbidden"</h3>
+            <ul>
+              <li>Unmapped cells (<code>255</code>) are hatched in legends, grey-shaded in profiles, and <strong>blocked by default</strong> so astronauts never enter unmapped ground unprompted.</li>
+              <li>Every parameter displays its engineering source &amp; confidence tag (<code>measured</code>, <code>scaled</code>, <code>ASSUMPTION</code>).</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>23.1M-Cell Browser Worker</h3>
+            <ul>
+              <li>256-entry speed LUTs + corridor-windowed A* (<code>~11 B/cell</code>, auto-expanding on border contact).</li>
+              <li>Streaming download progress; 46 MB <code>Int16</code> elevation lazy-loads only on first route.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>Marswalk Map</span>
+          <span>5 / 7</span>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 6 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 6 / 7 · Outputs &amp; Reusability</span>
+          <h2>Field-Ready Diagnostics &amp; Drop-In Planetary Portability</h2>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Interactive Mission Diagnostics</h3>
+            <ul>
+              <li><strong>Live 20 m Mars HUD:</strong> Instant cursor/tap readout of Mars coordinates, ceiling-quantized slope (with <code>≥</code> saturation flag), hazard class, landing class, and elevation.</li>
+              <li><strong>Plain-SVG Profiles:</strong> Dependency-free Elevation and Slope charts marking stops, NoData gaps, slope limits, and max-time turn-around.</li>
+              <li><strong>Mars GeoJSON Export:</strong> Downloads landing candidates, stops, leg metrics, and route line with explicit non-WGS84 Mars CRS metadata.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Zero-Code Adaptation to New Sites</h3>
+            <ul>
+              <li>100% static single-page web app deployed via GitHub Pages—no server, no API keys, no login wall.</li>
+              <li>Switching to another Martian landing ellipse or a Lunar Artemis south-pole region requires replacing only the JSON metadata, Web Mercator tiles, and compact binary grids in <code>public/veri</code>.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>Marswalk Map</span>
+          <span>6 / 7</span>
+        </div>
+      </section>
+
+      <!-- ==================== SLIDE 7 / 7 ==================== -->
+      <section class="slide">
+        <div>
+          <span class="slide-tag">Slide 7 / 7 · Limitations, Open Source &amp; Transparency</span>
+          <h2>Explicit Model Boundaries &amp; Responsible Engineering</h2>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Documented Physical Limitations</h3>
+            <ul>
+              <li><strong>Undirected Slope Speed:</strong> <em>Speed depends on slope magnitude only; uphill and downhill are treated the same.</em> Directional grade energetics and illumination/thermal shadow routing are next steps.</li>
+              <li><strong>Baseline Quantization:</strong> Slopes are ceiling-quantized over <code>egim_taban_uzunlugu_m</code> so steepness is never underestimated; meter-scale boulders rely on the hazard/HiRISE layer.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Open Source &amp; AI Disclosure</h3>
+            <ul>
+              <li><strong>License:</strong> Apache-2.0 (<code>github.com/demirataalbuz-maker/martian-map</code>). Shipped runtime library: MapLibre GL JS 6.18 (<code>BSD-3-Clause</code>).</li>
+              <li><strong>Use of AI:</strong> Code and tests were developed with Claude (Anthropic) and Antigravity (Google DeepMind) and verified by the team (attributed in every source header). Zero AI-generated imagery is used as planetary data.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="slide-foot">
+          <span>Thank you · Try live at demirataalbuz-maker.github.io/martian-map</span>
+          <span>7 / 7</span>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const btnAll = document.getElementById('btn-all');
+      const btnEndcard = document.getElementById('btn-endcard');
+      const btnPrint = document.getElementById('btn-print');
+
+      btnAll.addEventListener('click', () => {
+        document.body.classList.remove('endcard-only');
+        btnAll.classList.add('active');
+        btnEndcard.classList.remove('active');
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      });
+
+      btnEndcard.addEventListener('click', () => {
+        document.body.classList.add('endcard-only');
+        btnEndcard.classList.add('active');
+        btnAll.classList.remove('active');
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.body.classList.contains('endcard-only')) {
+          document.body.classList.remove('endcard-only');
+          btnAll.classList.add('active');
+          btnEndcard.classList.remove('active');
+        }
+      });
+
+      btnPrint.addEventListener('click', () => {
+        document.body.classList.remove('endcard-only');
+        window.print();
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+1
+00:00:00,200 --> 00:00:05,000
+Click a Mars science target — Marswalk Map finds the closest
+safe landing site (L) and separated backups (B1, B2).
+
+2
+00:00:05,000 --> 00:00:13,000
+It plots the fastest safe route and elevation profile; Round-trip
+checks the real return leg and marks life-support turn-around (!).
+
+3
+00:00:13,000 --> 00:00:21,000
+Compare a suited astronaut, crewed rover, and robotic rover
+side by side on the exact same mission.
+
+4
+00:00:21,000 --> 00:00:27,000
+Live 20 m terrain readout keeps "No data" distinct from "Forbidden",
+backed by sourced engineering limits and confidence tags.
+
+5
+00:00:27,000 --> 00:00:29,500
+Marswalk Map — Open-source Mars EVA & landing planner
+demirataalbuz-maker.github.io/martian-map | NASA PDS & USGS data
