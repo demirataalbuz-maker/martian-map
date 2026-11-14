@@ -6,3 +6,6 @@ dist/
 # Raw mission data never goes into the repository (only processed layers under public/veri).
 ham-veri/
 raw-data/
+
+# Local assistant tooling
+.claude/
