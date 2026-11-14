@@ -6,11 +6,12 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { SITE_NAME } from './config';
-import { loadGridMeta, loadLayerCatalog, loadMobility, type Corners } from './data';
+import { loadGridMeta, loadLayerCatalog, loadMobility, loadStops, type Corners } from './data';
 import { makeGridGeo } from './grid';
 import { initRoute } from './route';
 import { initLayerPanel } from './layers';
 import { attachScaleBar } from './scalebar';
+import { initStops } from './stops';
 import { initTraverserSelector } from './traverser';
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -43,8 +44,9 @@ async function start(): Promise<void> {
   showStatus('Loading map data…');
   document.getElementById('site-name')!.textContent = SITE_NAME;
 
-  const [catalog, grid, mobility] = await Promise.all([loadLayerCatalog(), loadGridMeta(), loadMobility()]);
-  document.getElementById('synthetic-badge')!.hidden = !(catalog.synthetic || mobility.synthetic);
+  const [catalog, grid, mobility, stops] = await Promise.all([loadLayerCatalog(), loadGridMeta(), loadMobility(), loadStops()]);
+  const synthetic = catalog.synthetic || mobility.synthetic;
+  document.getElementById('synthetic-badge')!.hidden = !synthetic;
   const geo = makeGridGeo(grid);
 
   const bounds = boundsOf(grid.koseler);
@@ -71,7 +73,8 @@ async function start(): Promise<void> {
 
   map.on('load', () => {
     initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
-    const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!);
+    const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!, { synthetic });
+    initStops(map, stops, (stop) => route.addPoint(stop.konum, stop.ad_en));
     initTraverserSelector(mobility.traversers, document.getElementById('route-traverser')!, (t) => route.setTraverser(t));
     attachScaleBar(map, grid, document.getElementById('scalebar')!);
     showStatus('');

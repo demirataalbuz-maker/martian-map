@@ -542,6 +542,87 @@ body {
   font-size: 0.75rem;
 }
 
+/* ---------- science stops ---------- */
+
+/* The map library sets its own transform on the marker element, so the diamond is drawn on ::before. */
+.stop-marker {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.stop-marker::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid #101010;
+  border-radius: 3px;
+  background: #ffd166;
+  transform: rotate(45deg);
+}
+
+.stop-marker:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.maplibregl-popup-content {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fbf7f3;
+  color: #231a15;
+  font-size: 0.85rem;
+}
+
+.maplibregl-popup-close-button {
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+  color: #231a15;
+}
+
+.stop-card h3 {
+  margin: 0 28px 6px 0;
+  font-size: 0.95rem;
+}
+
+.stop-card p {
+  margin: 0 0 8px;
+}
+
+.stop-card figure {
+  margin: 0 0 8px;
+}
+
+.stop-card img {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+}
+
+.stop-card figcaption,
+.stop-nophoto {
+  color: #6b5a50;
+  font-size: 0.75rem;
+}
+
+.stop-add {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  background: #b4531f;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* Tablet portrait / phone: panel becomes a bottom sheet under the map. */
 @media (max-width: 800px) {
   .layout {

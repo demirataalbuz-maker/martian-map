@@ -11,6 +11,7 @@
 //         <outDir>/veri/maliyet/egim.bin      Float32, row by row, degrees, -9999 = no data
 //         <outDir>/veri/maliyet/tehlike.bin   Uint8, 0 free, 1 caution, 2 forbidden, 255 = no data
 //         <outDir>/veri/maliyet/yukseklik.bin Float32, metres, -9999 = no data  (PROPOSED extension)
+//         <outDir>/veri/duraklar.json         science stops (PROPOSED extension)
 //         <outDir>/mobilite_parametreleri.json
 //
 // No dependencies: PNG encoding uses Node's built-in zlib.
@@ -319,6 +320,25 @@ writeFileSync(join(costDir, 'egim.bin'), Buffer.from(slope.buffer));
 writeFileSync(join(costDir, 'tehlike.bin'), Buffer.from(hazard.buffer));
 const elevOut = Float32Array.from(elev, (z, i) => (hazard[i] === 255 ? NODATA_F : z));
 writeFileSync(join(costDir, 'yukseklik.bin'), Buffer.from(elevOut.buffer));
+
+// Science stops (PROPOSED file, not yet in the team contract). No photos: the
+// generator does not fabricate surface imagery.
+const cellLonLat = (col, row) => {
+  const u = (col + 0.5) / W;
+  const v = (row + 0.5) / H;
+  return [r6(CORNERS[0][0] + u * (CORNERS[1][0] - CORNERS[0][0])), r6(CORNERS[0][1] + v * (CORNERS[3][1] - CORNERS[0][1]))];
+};
+const stops = {
+  sahte: true,
+  not_en: SYNTH,
+  duraklar: [
+    { id: 'stop_a', ad_en: 'Layered outcrop (synthetic)', konum: cellLonLat(70, 60), aciklama_en: 'Placeholder stop on the upper surface. Real description and photo to be supplied.' },
+    { id: 'stop_b', ad_en: 'Ramp head (synthetic)', konum: cellLonLat(120, 150), aciklama_en: 'Placeholder stop at the top of the only gentle way down the scarp.' },
+    { id: 'stop_c', ad_en: 'Boulder field (synthetic)', konum: cellLonLat(262, 172), aciklama_en: 'Placeholder stop on the lower plain.' },
+    { id: 'stop_d', ad_en: 'Unmapped corner (synthetic)', konum: cellLonLat(362, 28), aciklama_en: 'Placeholder stop inside the area with no slope or hazard data, to exercise the no-data warning.' },
+  ],
+};
+writeFileSync(join(dataDir, 'duraklar.json'), JSON.stringify(stops, null, 2));
 
 // Mobility parameters: every number below is an invented placeholder so the UI
 // has something to read. The real file (with a source for each number) comes

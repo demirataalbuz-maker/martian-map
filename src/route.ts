@@ -5,7 +5,7 @@
 
 import { Marker, type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from 'maplibre-gl';
 import { ELEVATION_URL, HAZARD_URL, SLOPE_URL } from './config';
-import type { GridMeta, Traverser } from './data';
+import type { GridMeta, LonLat, Traverser } from './data';
 import type { GridGeo } from './grid';
 import { renderResults } from './results';
 import type { FromWorker, RouteSuccess, RouterTraverser, ToWorker } from './route-types';
@@ -16,19 +16,37 @@ const absoluteUrl = (url: string): string => new URL(url, document.baseURI).href
 
 export interface RouteController {
   setTraverser(traverser: Traverser): void;
+  /** Adds a point to the route (start if it is the first), optionally with a name. */
+  addPoint(lonLat: LonLat, name?: string): void;
 }
 
-export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTraverser: Traverser, root: HTMLElement): RouteController {
+export interface RouteOptions {
+  /** True while the app runs on synthetic placeholder data; recorded in the exported file. */
+  synthetic: boolean;
+}
+
+export function initRoute(
+  map: MlMap,
+  grid: GridMeta,
+  geo: GridGeo,
+  initialTraverser: Traverser,
+  root: HTMLElement,
+  options: RouteOptions,
+): RouteController {
   // ------------------------------------------------------------ DOM
   const hint = root.querySelector<HTMLElement>('#route-hint')!;
   const message = root.querySelector<HTMLElement>('#route-message')!;
   const results = root.querySelector<HTMLElement>('#route-results')!;
   const undoButton = root.querySelector<HTMLButtonElement>('#route-undo')!;
   const clearButton = root.querySelector<HTMLButtonElement>('#route-clear')!;
+  const downloadButton = root.querySelector<HTMLButtonElement>('#route-download')!;
 
   // ------------------------------------------------------------ state
   let traverser = initialTraverser;
   const waypoints: number[] = [];
+  /** Name of each waypoint when it came from a predefined science stop, else null. */
+  const names: (string | null)[] = [];
+  let lastResult: RouteSuccess | null = null;
   const markers: Marker[] = [];
   let ready = false;
   let requestId = 0;
@@ -74,7 +92,8 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
       const element = document.createElement('div');
       element.className = index === 0 ? 'waypoint start' : 'waypoint';
       element.textContent = index === 0 ? 'S' : String(index);
-      element.title = index === 0 ? 'Start' : `Science stop ${index}`;
+      const role = index === 0 ? 'Start' : `Science stop ${index}`;
+      element.title = names[index] ? `${role}: ${names[index]}` : role;
       markers.push(new Marker({ element }).setLngLat(geo.indexToLonLat(cell)).addTo(map));
     });
     undoButton.disabled = waypoints.length === 0;
@@ -85,7 +104,11 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
         : 'Tap the map to add a science stop. Stops are visited in the order you add them.';
   };
 
-  const renderSummary = (result: RouteSuccess | null): void => renderResults(results, result, traverser, grid.hucre_m);
+  const renderSummary = (result: RouteSuccess | null): void => {
+    lastResult = result && result.legs.length > 0 ? result : null;
+    downloadButton.disabled = lastResult === null;
+    renderResults(results, result, traverser, grid.hucre_m);
+  };
 
   // ------------------------------------------------------------ worker
   const worker = new Worker(new URL('./route-worker.ts', import.meta.url), { type: 'module' });
@@ -143,6 +166,7 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
       const justAdded = lastActionWasAdd && msg.waypointIndex === waypoints.length - 1;
       if (justAdded) {
         waypoints.pop();
+        names.pop();
         lastActionWasAdd = false;
         const notice = `That point ${why}, so it was not added. Pick another point.`;
         requestRoute(); // restore the previous route
@@ -173,35 +197,90 @@ export function initRoute(map: MlMap, grid: GridMeta, geo: GridGeo, initialTrave
   });
 
   // ------------------------------------------------------------ interaction
-  map.on('click', (event: MapMouseEvent) => {
+  const addPoint = (lonLat: LonLat, name?: string): void => {
     if (!ready) return;
-    const cell = geo.lonLatToIndex(event.lngLat.lng, event.lngLat.lat);
+    const cell = geo.lonLatToIndex(lonLat[0], lonLat[1]);
     if (cell === null) {
       showMessage('That point is outside the mapped area.', 'error');
       return;
     }
     if (waypoints[waypoints.length - 1] === cell) return;
     waypoints.push(cell);
+    names.push(name ?? null);
     lastActionWasAdd = true;
     pendingNotice = '';
     requestRoute();
-  });
+  };
+  map.on('click', (event: MapMouseEvent) => addPoint([event.lngLat.lng, event.lngLat.lat]));
   undoButton.addEventListener('click', () => {
     waypoints.pop();
+    names.pop();
     lastActionWasAdd = false;
     pendingNotice = '';
     requestRoute();
   });
   clearButton.addEventListener('click', () => {
     waypoints.length = 0;
+    names.length = 0;
     lastActionWasAdd = false;
     pendingNotice = '';
     requestRoute();
   });
 
+  // ------------------------------------------------------------ GeoJSON export
+  const round = (value: number, digits: number): number => Number(value.toFixed(digits));
+  const coordinate = (cell: number): LonLat => {
+    const [lon, lat] = geo.indexToLonLat(cell);
+    return [round(lon, 7), round(lat, 7)];
+  };
+
+  downloadButton.addEventListener('click', () => {
+    const result = lastResult;
+    if (!result) return;
+    const collection = {
+      type: 'FeatureCollection',
+      properties: {
+        body: 'Mars',
+        note: 'Coordinates are Mars [longitude, latitude] in the same system as the map layers, NOT Earth WGS 84. Distances and times were computed on the cost grid, not from these coordinates.',
+        synthetic_data: options.synthetic,
+        grid_cell_m: grid.hucre_m,
+      },
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            kind: 'route',
+            traverser_id: traverser.id,
+            traverser_name: traverser.ad_en,
+            distance_m: round(result.distance_m, 1),
+            estimated_time_s: Math.round(result.time_s),
+            no_data_m: round(result.noDataCells * grid.hucre_m, 1),
+            caution_m: round(result.cautionCells * grid.hucre_m, 1),
+            legs: result.legs.map((leg) => ({ distance_m: round(leg.distance_m, 1), estimated_time_s: Math.round(leg.time_s) })),
+          },
+          geometry: { type: 'LineString', coordinates: Array.from(result.path, coordinate) },
+        },
+        ...waypoints.map((cell, index) => ({
+          type: 'Feature',
+          properties: { kind: index === 0 ? 'start' : 'science_stop', order: index, name: names[index] },
+          geometry: { type: 'Point', coordinates: coordinate(cell) },
+        })),
+      ],
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(collection, null, 2)], { type: 'application/geo+json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'marswalk-route.geojson';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
   renderMarkers();
 
   return {
+    addPoint,
     setTraverser(next) {
       traverser = next;
       lastActionWasAdd = false;

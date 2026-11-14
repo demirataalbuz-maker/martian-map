@@ -6,7 +6,7 @@ obstacle-avoiding route planning between science stops.
 Built for the NASA Space Apps Challenge 2026, challenge *Interplanetary Survival
 Guide: Martian Map*. Static single-page web app, no backend.
 
-> **Status:** step 5 of 7 — layers, routing, traverser selector, result panel with profiles
+> **Status:** step 6 of 7 — everything except deployment: layers, routing, results, science stops, GeoJSON export
 > (start + science stops, visited in tap order). The data in `public/veri` is **synthetic** and is
 > labelled as such in the UI.
 
@@ -42,6 +42,7 @@ Assumptions the code makes, **to be confirmed with the data owners**:
 - `koseler` order is top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW), each `[longitude, latitude]`.
 - Row 0 of every raster is the north edge; binaries are little-endian.
 - `katmanlar.json` is either a bare array or `{ "katmanlar": [...] }`; `lejant` is a list of `{ "renk": "#rrggbb", "etiket_en": "..." }`.
+- `veri/duraklar.json` is a **proposed addition** for science stops: `{ "duraklar": [{ "id", "ad_en", "konum": [lon, lat], "aciklama_en", "foto", "foto_kaynak" }] }`. `foto` is an image file in `veri/`; it and the file itself are optional.
 - `maliyet/yukseklik.bin` (Float32, metres, -9999 = no data) is a **proposed addition**: the elevation profile cannot be drawn from slope alone.
 
 ## Design rules
@@ -59,6 +60,11 @@ Assumptions the code makes, **to be confirmed with the data owners**:
 - Warnings: estimated time above `azami_sure_saat`; slope close to the limit; crossing "no data"; crossing "caution".
 - "Close to the limit" uses the optional `uyari_egim_derece` field of a traverser; without it, the highest speed-table breakpoint below the limit is used.
 - Without `maliyet/yukseklik.bin` the app still works and says the elevation profile is unavailable.
+
+## Science stops and export
+
+- Diamond markers are the predefined science stops; tapping one shows its description, its surface photo with credit (when provided) and an "Add to route" button.
+- "Download route (GeoJSON)" saves the route line, start and stops with distance, time and per-leg figures. Coordinates are Mars longitude / latitude in the layers' own system, not Earth WGS 84; the file says so.
 
 ## Use of AI
 

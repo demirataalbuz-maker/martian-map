@@ -1,7 +1,7 @@
 // AI-assisted code: written with Claude (Anthropic), reviewed by the team.
 // Loaders and types for the team's data contract (field names are Turkish by agreement).
 
-import { DATA_DIR, GRID_URL, LAYERS_URL, MOBILITY_URL } from './config';
+import { DATA_DIR, GRID_URL, LAYERS_URL, MOBILITY_URL, STOPS_URL } from './config';
 
 export type LonLat = [number, number];
 /** Corner order: top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW). */
@@ -123,4 +123,33 @@ export async function loadMobility(): Promise<MobilityParams> {
     t.hiz_tablosu = [...t.hiz_tablosu].sort((a, b) => a.egim_derece - b.egim_derece);
   }
   return { synthetic: raw.sahte === true, traversers };
+}
+
+// ------------------------------------------------------------ science stops
+
+export interface ScienceStop {
+  id: string;
+  ad_en: string;
+  /** [longitude, latitude] */
+  konum: LonLat;
+  aciklama_en?: string;
+  /** Image file name inside the data folder (optional). */
+  foto?: string;
+  /** Photo credit (mission / instrument / image id). */
+  foto_kaynak?: string;
+}
+
+/** The stops file is optional: without it the app simply shows no predefined stops. */
+export async function loadStops(): Promise<ScienceStop[]> {
+  let raw: unknown;
+  try {
+    raw = await fetchJson(STOPS_URL);
+  } catch {
+    return [];
+  }
+  const list = Array.isArray(raw) ? raw : (raw as { duraklar?: unknown }).duraklar;
+  if (!Array.isArray(list)) return [];
+  return (list as ScienceStop[]).filter(
+    (stop) => stop && typeof stop.ad_en === 'string' && Array.isArray(stop.konum) && stop.konum.length === 2 && stop.konum.every((n) => Number.isFinite(n)),
+  );
 }
