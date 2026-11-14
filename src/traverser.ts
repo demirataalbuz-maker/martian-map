@@ -63,13 +63,17 @@ function landingRows(lc: LandingCraftParams): { label: string; value: string; ke
   return rows;
 }
 
+export interface TraverserSelectorController {
+  selectById(id: string): void;
+}
+
 export function initTraverserSelector(
   traversers: Traverser[],
   landingCraft: LandingCraftParams | null,
   root: HTMLElement,
   onChange: (traverser: Traverser) => void,
   slopeBaselineM?: number,
-): void {
+): TraverserSelectorController {
   root.replaceChildren();
 
   const group = el('div', 'traverser-options');
@@ -104,6 +108,8 @@ export function initTraverserSelector(
     }
   };
 
+  const radios = new Map<string, { radio: HTMLInputElement; traverser: Traverser }>();
+
   traversers.forEach((t, index) => {
     const label = el('label', 'traverser-option');
     const radio = el('input');
@@ -116,10 +122,21 @@ export function initTraverserSelector(
       showParameters(t);
       onChange(t);
     });
+    radios.set(t.id, { radio, traverser: t });
     label.append(radio, el('span', 'traverser-name', t.ad_en), el('span', 'traverser-limit', `≤ ${t.azami_egim_derece}°`));
     group.append(label);
   });
 
   showParameters(traversers[0]);
   root.append(group, noteEl, details);
+
+  return {
+    selectById(id: string) {
+      const found = radios.get(id);
+      if (!found || found.radio.checked) return;
+      found.radio.checked = true;
+      showParameters(found.traverser);
+      onChange(found.traverser);
+    },
+  };
 }

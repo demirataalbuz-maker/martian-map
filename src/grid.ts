@@ -1,4 +1,4 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Conversion between cost-grid cells and [longitude, latitude].
 // Coordinates are used ONLY to place things on screen. Distances and times are

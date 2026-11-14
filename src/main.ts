@@ -30,17 +30,19 @@ function boundsOf(corners: Corners): LngLatBounds {
   return bounds;
 }
 
-function initPanelToggle(): void {
+function initPanelToggle(onToggle: () => void): void {
   const panel = document.getElementById('panel')!;
   const button = document.getElementById('panel-toggle')!;
   button.addEventListener('click', () => {
     const collapsed = panel.classList.toggle('collapsed');
     button.setAttribute('aria-expanded', String(!collapsed));
+    onToggle();
   });
 }
 
 async function start(): Promise<void> {
-  initPanelToggle();
+  let routeRef: ReturnType<typeof initRoute> | null = null;
+  initPanelToggle(() => routeRef?.syncCollapsedAlert());
   showStatus('Loading map data…');
 
   const [catalog, grid, mobility, stopsCatalog] = await Promise.all([
@@ -79,21 +81,26 @@ async function start(): Promise<void> {
 
   map.on('load', () => {
     try {
+      showStatus('');
       initLayerPanel(map, catalog.layers, document.getElementById('layer-list')!);
-      const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!, {
-        synthetic,
-        landingCraft: mobility.landingCraft,
-      });
-      initStops(map, stopsCatalog.stops, (stop) => route.addPoint(stop.konum, stop.ad_en));
-      initTraverserSelector(
+      const selector = initTraverserSelector(
         mobility.traversers,
         mobility.landingCraft,
         document.getElementById('route-traverser')!,
-        (t) => route.setTraverser(t),
+        (t) => routeRef?.setTraverser(t),
         grid.egim_taban_uzunlugu_m,
       );
+      const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!, {
+        synthetic,
+        landingCraft: mobility.landingCraft,
+        traversers: mobility.traversers,
+        stops: stopsCatalog.stops,
+        onSelectTraverser: (id) => selector.selectById(id),
+        onStartupProgress: (text) => showStatus(text),
+      });
+      routeRef = route;
+      initStops(map, stopsCatalog.stops, (stop) => route.addPoint(stop.konum, stop.ad_en));
       attachScaleBar(map, grid, document.getElementById('scalebar')!);
-      showStatus('');
     } catch (err: unknown) {
       console.error(err);
       showStatus(err instanceof Error ? err.message : String(err), true);

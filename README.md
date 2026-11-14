@@ -61,12 +61,13 @@ Key contract details:
 - No Earth basemap tiles. Layers are placed as images by their four corners.
 - Raw mission data is not stored in this repository.
 
-## Result panel and warnings
+## Result panel, mission options and warnings
 
-- Totals: distance, estimated one-way time, steepest slope, climb / descent, per-leg figures.
-- Elevation and slope profiles are plain SVG drawn by the app (no chart library).
-- Warnings: estimated time above `azami_sure_saat`; slope close to the limit; crossing "no data"; crossing "caution".
-- "Close to the limit" uses the optional `uyari_egim_derece` field of a traverser; without it, the highest speed-table breakpoint below the limit is used.
+- Mission options: optional round-trip return to landing / start, configurable work duration per science stop, policy toggle for unmapped ("no data") terrain, 1-click sample mission, live Mars terrain cursor/tap HUD, and side-by-side comparison across all traversers.
+- Totals: distance, estimated mission time (with travel + stop work breakdown), steepest slope (with measurement baseline), climb / descent, per-leg figures.
+- Elevation and slope profiles are plain SVG drawn by the app (no chart library), marking stops, no-data spans, and any max-duration turn-around point.
+- Warnings: estimated time above `azami_sure_saat`; marginal landing zone fallback; slope close to the limit; crossing "no data"; crossing "caution" (all step-weighted with diagonal × √2).
+- "Close to the limit" uses the optional `uyari_egim_derece` field of a traverser; without it, the highest positive speed-table breakpoint below the limit is used.
 - Without `maliyet/yukseklik.bin` the app still works and says the elevation profile is unavailable.
 
 ## Science stops and export
@@ -95,4 +96,4 @@ Worker). All numbers come from the data files:
 - step length = `hucre_m` (orthogonal) or `hucre_m` × √2 (diagonal); step time = length / speed
 - cell speed = the traverser's speed table interpolated at the cell's slope
 - impassable = hazard class 2 (forbidden) or slope above the traverser's limit; diagonal steps never cut a blocked corner
-- **assumption to confirm with the team:** "caution" and "no data" cells are passable, but only at the slowest speed in the traverser's table, and the route panel warns when the path crosses them
+- "caution" cells are passable at the slowest speed in the traverser's table and trigger a route warning; unmapped ("no data", 255) cells are **not crossed by default** (distinct from "forbidden" 2, with a dedicated message) and can optionally be allowed at slowest speed with a warning via the UI toggle

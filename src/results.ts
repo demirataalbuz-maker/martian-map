@@ -5,7 +5,7 @@
 // comes from mobilite_parametreleri.json.
 
 import type { Traverser } from './data';
-import type { RouteSuccess } from './route-types';
+import type { RouteSuccess, TraverserComparisonRow } from './route-types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -55,9 +55,31 @@ interface ChartSpec {
   refs?: { y: number; label: string; className: string }[];
   /** Distances of the science stops along the route. */
   stops: number[];
+  /** Optional distance along the route where max mission duration is exceeded. */
+  turnAroundX?: number | null;
   /** [from, to] distance spans with no data. */
   gaps: [number, number][];
   includeZero?: boolean;
+}
+
+function gapsFromSeries(xs: Float32Array, ys: Float32Array): [number, number][] {
+  const gaps: [number, number][] = [];
+  if (xs.length === 0) return gaps;
+  let gapStart = -1;
+  for (let i = 0; i < ys.length; i++) {
+    if (Number.isNaN(ys[i])) {
+      if (gapStart < 0) gapStart = i;
+    } else if (gapStart >= 0) {
+      const from = gapStart > 0 ? xs[gapStart - 1] : xs[0];
+      gaps.push([from, xs[i]]);
+      gapStart = -1;
+    }
+  }
+  if (gapStart >= 0) {
+    const from = gapStart > 0 ? xs[gapStart - 1] : xs[0];
+    gaps.push([from, xs[xs.length - 1]]);
+  }
+  return gaps;
 }
 
 const VIEW_W = 300;
@@ -96,6 +118,15 @@ function drawChart(spec: ChartSpec): SVGSVGElement {
   for (const stop of spec.stops) {
     root.append(svg('line', { x1: px(stop), x2: px(stop), y1: M.top, y2: M.top + plotH, class: 'chart-stop' }));
   }
+  if (typeof spec.turnAroundX === 'number' && Number.isFinite(spec.turnAroundX)) {
+    const tx = px(spec.turnAroundX);
+    root.append(svg('line', { x1: tx, x2: tx, y1: M.top, y2: M.top + plotH, class: 'chart-turnaround' }));
+    const anchor = tx > M.left + plotW * 0.75 ? 'end' : 'start';
+    const dx = anchor === 'end' ? -3 : 3;
+    root.append(
+      svg('text', { x: tx + dx, y: M.top + 9, class: 'chart-turnaround-label', 'text-anchor': anchor }, 'max t'),
+    );
+  }
   for (const ref of spec.refs ?? []) {
     root.append(svg('line', { x1: M.left, x2: M.left + plotW, y1: py(ref.y), y2: py(ref.y), class: `chart-ref ${ref.className}` }));
     root.append(svg('text', { x: M.left + plotW - 2, y: py(ref.y) - 2, class: `chart-ref-label ${ref.className}`, 'text-anchor': 'end' }, ref.label));
@@ -128,7 +159,6 @@ export function renderResults(
   root: HTMLElement,
   result: RouteSuccess | null,
   traverser: Traverser,
-  cellM: number,
   slopeBaselineM?: number,
 ): void {
   root.replaceChildren();
@@ -139,24 +169,23 @@ export function renderResults(
   const slopes = result.profileSlope;
   const elev = result.profileElev;
 
-  // Derived figures
+  // Derived figures (step-weighted so diagonal steps count as cellM * sqrt(2))
   let maxSlope = -Infinity;
   let ascent = 0;
   let descent = 0;
-  let nearCells = 0;
+  let nearLimitM = 0;
   const near = nearLimitSlope(traverser);
-  const gaps: [number, number][] = [];
-  let gapStart = -1;
   let previousElev = NaN;
   for (let i = 0; i < slopes.length; i++) {
     const s = slopes[i];
-    if (Number.isNaN(s)) {
-      if (gapStart < 0) gapStart = i;
-    } else {
-      if (gapStart >= 0) gaps.push([xs[gapStart], xs[i]]);
-      gapStart = -1;
+    if (!Number.isNaN(s)) {
       maxSlope = Math.max(maxSlope, s);
-      if (near !== null && s >= near) nearCells++;
+    }
+    if (i > 0 && near !== null) {
+      const step = xs[i] - xs[i - 1];
+      const prevNear = !Number.isNaN(slopes[i - 1]) && slopes[i - 1] >= near ? 0.5 : 0;
+      const curNear = !Number.isNaN(s) && s >= near ? 0.5 : 0;
+      nearLimitM += step * (prevNear + curNear);
     }
     if (elev) {
       const z = elev[i];
@@ -167,7 +196,8 @@ export function renderResults(
       previousElev = z;
     }
   }
-  if (gapStart >= 0) gaps.push([xs[gapStart], xs[xs.length - 1]]);
+  const slopeGaps = gapsFromSeries(xs, slopes);
+  const elevGaps = elev ? gapsFromSeries(xs, elev) : [];
 
   // Totals
   const totals = el('dl', 'route-summary');
@@ -175,9 +205,14 @@ export function renderResults(
   const hasLimit = typeof limitHours === 'number' && Number.isFinite(limitHours) && limitHours > 0;
   const hasBaseline = typeof slopeBaselineM === 'number' && Number.isFinite(slopeBaselineM) && slopeBaselineM > 0;
   const baselineSuffix = hasBaseline ? ` on ${slopeBaselineM} m baseline` : '';
+  const limitSuffix = hasLimit ? ` (limit ${limitHours} h)` : '';
+  const timeBreakdown =
+    result.stopTime_s > 0
+      ? ` — ${formatDuration(result.travelTime_s)} travel + ${formatDuration(result.stopTime_s)} at stops`
+      : '';
   const rows: [string, string][] = [
-    ['Distance', `${Math.round(result.distance_m)} m`],
-    ['Estimated time', hasLimit ? `${formatDuration(result.time_s)} (limit ${limitHours} h)` : formatDuration(result.time_s)],
+    ['Distance', `${Math.round(result.distance_m)} m${result.roundTrip ? ' (round-trip)' : ''}`],
+    ['Estimated time', `${formatDuration(result.time_s)}${limitSuffix}${timeBreakdown}`],
     [
       'Steepest slope',
       Number.isFinite(maxSlope) ? `${maxSlope.toFixed(1)}°${baselineSuffix} (limit ${traverser.azami_egim_derece}°)` : 'unknown',
@@ -189,10 +224,18 @@ export function renderResults(
 
   const originLabel = result.mode === 'auto-landing' ? 'Landing' : 'Start';
   if (result.legs.length >= 1) {
+    const stopCount = result.roundTrip ? result.legs.length - 1 : result.legs.length;
     const legs = el('ol', 'route-legs');
     result.legs.forEach((leg, index) => {
-      const from = index === 0 ? originLabel : `Stop ${index}`;
-      legs.append(el('li', undefined, `${from} → Stop ${index + 1}: ${Math.round(leg.distance_m)} m, ${formatDuration(leg.time_s)}`));
+      if (leg.isReturn) {
+        const from = stopCount > 0 ? `Stop ${stopCount}` : originLabel;
+        legs.append(
+          el('li', undefined, `${from} → ${originLabel} (return): ${Math.round(leg.distance_m)} m, ${formatDuration(leg.time_s)}`),
+        );
+      } else {
+        const from = index === 0 ? originLabel : `Stop ${index}`;
+        legs.append(el('li', undefined, `${from} → Stop ${index + 1}: ${Math.round(leg.distance_m)} m, ${formatDuration(leg.time_s)}`));
+      }
     });
     root.append(legs);
   }
@@ -205,16 +248,26 @@ export function renderResults(
     );
   }
   if (hasLimit && result.time_s > limitHours * 3600) {
-    warnings.push(`Estimated time ${formatDuration(result.time_s)} exceeds the ${limitHours} h maximum for "${traverser.ad_en}".`);
+    const turnNote =
+      result.turnAroundDist_m !== null
+        ? ` Budget is exhausted around ${Math.round(result.turnAroundDist_m)} m along the route (marked "!" on the map).`
+        : '';
+    warnings.push(
+      `Estimated mission time ${formatDuration(result.time_s)} exceeds the ${limitHours} h maximum for "${traverser.ad_en}".${turnNote}`,
+    );
   }
-  if (near !== null && nearCells > 0) {
-    warnings.push(`About ${Math.round(nearCells * cellM)} m of the route is on slopes of ${near}° or more, close to the ${traverser.azami_egim_derece}° limit.`);
+  if (near !== null && nearLimitM > 0) {
+    warnings.push(
+      `About ${Math.max(1, Math.round(nearLimitM))} m of the route is on slopes of ${near}° or more, close to the ${traverser.azami_egim_derece}° limit.`,
+    );
   }
   if (result.noDataCells > 0) {
-    warnings.push(`The route crosses about ${Math.round(result.noDataCells * cellM)} m with NO DATA. Terrain there is unknown; this is not the same as forbidden.`);
+    warnings.push(
+      `The route crosses about ${Math.max(1, Math.round(result.noDataM))} m with NO DATA. Terrain there is unknown; this is not the same as forbidden.`,
+    );
   }
   if (result.cautionCells > 0) {
-    warnings.push(`The route crosses about ${Math.round(result.cautionCells * cellM)} m of terrain marked "caution".`);
+    warnings.push(`The route crosses about ${Math.max(1, Math.round(result.cautionM))} m of terrain marked "caution".`);
   }
   const list = el('ul', 'route-warnings');
   if (warnings.length === 0) list.append(el('li', 'ok', 'No warnings for this route.'));
@@ -230,24 +283,101 @@ export function renderResults(
   }
   const charts = el('div', 'charts');
   if (elev) {
-    charts.append(drawChart({ title: 'Elevation', unit: 'm', xs, ys: elev, total: result.distance_m, stops, gaps }));
+    charts.append(
+      drawChart({
+        title: 'Elevation',
+        unit: 'm',
+        xs,
+        ys: elev,
+        total: result.distance_m,
+        stops,
+        turnAroundX: result.turnAroundDist_m,
+        gaps: elevGaps,
+      }),
+    );
   } else {
     charts.append(el('p', 'chart-missing', 'Elevation profile unavailable: no elevation grid was provided.'));
   }
   const refs = [{ y: traverser.azami_egim_derece, label: `limit ${traverser.azami_egim_derece}°`, className: 'limit' }];
   if (near !== null) refs.push({ y: near, label: `${near}°`, className: 'near' });
   const slopeTitle = hasBaseline ? `Slope (${slopeBaselineM} m baseline)` : 'Slope';
-  charts.append(drawChart({ title: slopeTitle, unit: '°', xs, ys: slopes, total: result.distance_m, stops, gaps, refs, includeZero: true }));
+  charts.append(
+    drawChart({
+      title: slopeTitle,
+      unit: '°',
+      xs,
+      ys: slopes,
+      total: result.distance_m,
+      stops,
+      turnAroundX: result.turnAroundDist_m,
+      gaps: slopeGaps,
+      refs,
+      includeZero: true,
+    }),
+  );
   root.append(charts);
 
+  const timeBasis = result.roundTrip
+    ? result.stopTime_s > 0
+      ? 'Time includes round-trip travel and work time at science stops.'
+      : 'Time is round-trip travel (work per stop is set to 0 min).'
+    : result.stopTime_s > 0
+    ? 'Time includes one-way travel and work time at science stops (no return leg).'
+    : 'Time is one-way travel only (no time at stops, no return).';
   const baselineNote = hasBaseline
     ? `Terrain slope is ceiling-quantized over a ${slopeBaselineM} m baseline (not directional slope).`
     : 'Slope is the terrain slope of each cell, not the slope along the direction of travel.';
-  root.append(
-    el(
-      'p',
-      'route-note',
-      `Time is one-way travel only (no time at stops, no return). ${baselineNote} Grey spans in the charts have no data.`,
-    ),
-  );
+  root.append(el('p', 'route-note', `${timeBasis} ${baselineNote} Grey spans in the charts have no data.`));
+}
+
+export function renderComparison(
+  container: HTMLElement,
+  rows: TraverserComparisonRow[] | null,
+  activeId: string,
+  onSelect: (id: string) => void,
+): void {
+  container.replaceChildren();
+  if (!rows) {
+    container.append(el('p', 'route-note', 'Comparing traversers…'));
+    return;
+  }
+
+  const table = el('table', 'compare-table');
+  const thead = el('thead');
+  const hr = el('tr');
+  for (const h of ['Traverser', 'Dist.', 'Time', 'Max °', 'Status']) {
+    hr.append(el('th', undefined, h));
+  }
+  thead.append(hr);
+  table.append(thead);
+
+  const tbody = el('tbody');
+  for (const row of rows) {
+    const tr = el('tr', `compare-row${row.id === activeId ? ' active' : ''}`);
+    tr.title = `Switch to ${row.name}`;
+    tr.addEventListener('click', () => onSelect(row.id));
+
+    tr.append(el('td', undefined, row.name));
+    if (row.ok) {
+      tr.append(el('td', undefined, `${Math.round(row.distance_m ?? 0)} m`));
+      tr.append(el('td', undefined, formatDuration(row.time_s ?? 0)));
+      tr.append(el('td', undefined, `${(row.maxSlope_deg ?? 0).toFixed(1)}°`));
+      if (row.withinLimit === false) {
+        tr.append(el('td', 'compare-status-warn', 'Exceeds max time'));
+      } else if (row.marginalLanding) {
+        tr.append(el('td', 'compare-status-warn', 'Marginal landing'));
+      } else {
+        tr.append(el('td', 'compare-status-ok', 'OK'));
+      }
+    } else {
+      tr.append(el('td', undefined, '—'));
+      tr.append(el('td', undefined, '—'));
+      tr.append(el('td', undefined, '—'));
+      tr.append(el('td', 'compare-status-bad', row.failReason ?? 'Blocked'));
+    }
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  container.append(table);
+  container.append(el('p', 'route-note', 'Click any row to switch to that traverser.'));
 }

@@ -1,4 +1,4 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Science stops from veri/duraklar.json: a marker per stop; tapping it opens a
 // card with the description, the surface photo (when one is provided) and a

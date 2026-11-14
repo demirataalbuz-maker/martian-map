@@ -1,4 +1,4 @@
-// AI-assisted code: written with Claude (Anthropic), reviewed by the team.
+// AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 //
 // Scale bar drawn from the cost grid, NOT from the map library: map libraries
 // assume Earth's radius. Ground distance comes from the grid (cells x hucre_m);

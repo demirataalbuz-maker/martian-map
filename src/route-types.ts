@@ -21,6 +21,26 @@ export interface LandingCandidate {
   time_s: number;
 }
 
+export interface TraverserComparisonEntry {
+  id: string;
+  name: string;
+  traverser: RouterTraverser;
+}
+
+export interface TraverserComparisonRow {
+  id: string;
+  name: string;
+  ok: boolean;
+  distance_m?: number;
+  time_s?: number;
+  travelTime_s?: number;
+  stopTime_s?: number;
+  maxSlope_deg?: number;
+  withinLimit?: boolean;
+  marginalLanding?: boolean;
+  failReason?: string;
+}
+
 export type ToWorker =
   | {
       type: 'init';
@@ -52,16 +72,38 @@ export type ToWorker =
       chosenLandingCell?: number | null;
       /** Minimum separation in metres between primary and backup landing centres (from inis_araci.guvenli_alan_capi_m). */
       minSeparationM: number;
-      /** Optional cap on one-way travel time (s) from landing site to Stop 1 (e.g. halved in round-trip mode). */
+      /** Optional cap on one-way travel time (s) from landing site to Stop 1. */
       maxLandingTimeS?: number | null;
+      /** When true, appends a return leg from the final stop back to the landing site / start. */
+      roundTrip?: boolean;
+      /** User-selected work duration per science stop in seconds (default 0). */
+      stopWorkS?: number;
+      /** When true, allows crossing unmapped (no-data = 255) cells at slowest speed; default false (blocked). */
+      allowNoData?: boolean;
       traverser: RouterTraverser;
+    }
+  | {
+      type: 'probe';
+      cell: number;
+    }
+  | {
+      type: 'compare';
+      id: number;
+      mode: 'manual' | 'auto-landing';
+      waypoints: number[];
+      minSeparationM: number;
+      roundTrip: boolean;
+      stopWorkS: number;
+      allowNoData: boolean;
+      entries: TraverserComparisonEntry[];
     };
 
-export type BlockReason = 'forbidden' | 'too-steep';
+export type BlockReason = 'forbidden' | 'too-steep' | 'no-data';
 
 export interface RouteLeg {
   distance_m: number;
   time_s: number;
+  isReturn?: boolean;
 }
 
 export interface RouteSuccess {
@@ -69,21 +111,32 @@ export interface RouteSuccess {
   id: number;
   ok: true;
   mode: 'manual' | 'auto-landing';
+  roundTrip: boolean;
   /** Suggested landing sites (primary + separated backups) when mode === 'auto-landing'. */
   landingCandidates: LandingCandidate[];
   /** Active landing cell when mode === 'auto-landing', else null. */
   activeLandingCell: number | null;
   /** True when no tier-0 landing site was in range so tier-1 (marginal) sites were used. */
   marginalLanding: boolean;
-  /** Cell indices (row * width + col) from start/landing to last stop. */
+  /** Cell indices (row * width + col) from start/landing through all stops (and back if roundTrip). */
   path: Int32Array;
   legs: RouteLeg[];
   distance_m: number;
+  /** Total mission duration in seconds (travelTime_s + stopTime_s). */
   time_s: number;
+  travelTime_s: number;
+  stopTime_s: number;
   /** Cells on the path with no slope/hazard data. */
   noDataCells: number;
   /** Cells on the path classed "caution". */
   cautionCells: number;
+  /** Exact step-weighted distance (including diagonal ×√2) across no-data cells. */
+  noDataM: number;
+  /** Exact step-weighted distance (including diagonal ×√2) across caution cells. */
+  cautionM: number;
+  /** Last cell along the path before cumulative mission time exceeds maxTimeS (null when within limit). */
+  turnAroundCell: number | null;
+  turnAroundDist_m: number | null;
   /** Per path cell: distance from the start in metres (grid-based). */
   profileDist: Float32Array;
   /** Per path cell: slope in degrees, NaN where there is no data. */
@@ -94,11 +147,29 @@ export interface RouteSuccess {
 
 export type RouteFailure =
   | { type: 'route-result'; id: number; ok: false; reason: 'blocked-waypoint'; waypointIndex: number; why: BlockReason }
-  | { type: 'route-result'; id: number; ok: false; reason: 'no-route'; legIndex: number }
+  | { type: 'route-result'; id: number; ok: false; reason: 'no-route'; legIndex: number; isReturnLeg?: boolean }
   | { type: 'route-result'; id: number; ok: false; reason: 'no-landing'; withinRangeChecked: boolean };
 
 export type FromWorker =
+  | {
+      type: 'load-progress';
+      phase: 'terrain' | 'elevation';
+      loadedBytes: number;
+      totalBytes: number;
+      percent: number;
+    }
   | { type: 'ready'; noDataCells: number; totalCells: number; hasElevation: boolean; hasLanding: boolean }
   | { type: 'init-error'; message: string }
+  | {
+      type: 'probe-result';
+      cell: number;
+      slopeDeg: number | null;
+      slopeAtOrAboveMaxByte: boolean;
+      hazardClass: number;
+      landingClass: number | null;
+      elevM: number | null;
+      elevLoaded: boolean;
+    }
+  | { type: 'compare-result'; id: number; rows: TraverserComparisonRow[] }
   | RouteSuccess
   | RouteFailure;

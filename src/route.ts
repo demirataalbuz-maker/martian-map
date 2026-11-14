@@ -5,22 +5,59 @@
 //     the map; the Web Worker recommends the closest safe landing site plus
 //     separated backups via reverse Dijkstra, and draws the route.
 //   - Manual mode: tap the start point first, then science stops.
+//   - Mission options: round-trip return, per-stop work duration, unmapped
+//     (no-data) terrain policy, live Mars terrain HUD, sample mission, and
+//     all-traverser mission comparison.
 
-import { Marker, type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from 'maplibre-gl';
+import { LngLatBounds, Marker, type GeoJSONSource, type Map as MlMap, type MapMouseEvent } from 'maplibre-gl';
 import { ELEVATION_URL, HAZARD_URL, LANDING_URL, SLOPE_URL } from './config';
-import type { GridMeta, LandingCraftParams, LonLat, Traverser } from './data';
+import type { GridMeta, LandingCraftParams, LonLat, ScienceStop, Traverser } from './data';
 import type { GridGeo } from './grid';
-import { formatDuration, renderResults } from './results';
-import type { FromWorker, LandingCandidate, RouteSuccess, RouterTraverser, ToWorker } from './route-types';
+import { formatDuration, renderComparison, renderResults } from './results';
+import type {
+  FromWorker,
+  LandingCandidate,
+  RouteSuccess,
+  RouterTraverser,
+  ToWorker,
+  TraverserComparisonRow,
+} from './route-types';
 
 const ROUTE_SOURCE = 'route';
 
 const absoluteUrl = (url: string): string => new URL(url, document.baseURI).href;
+const fmtMB = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1);
+
+function toRouterTraverser(t: Traverser): RouterTraverser {
+  return {
+    maxSlopeDeg: t.azami_egim_derece,
+    speedTable: t.hiz_tablosu.map((entry): [number, number] => [entry.egim_derece, entry.hiz_m_s]),
+    maxTimeS:
+      typeof t.azami_sure_saat === 'number' && Number.isFinite(t.azami_sure_saat) && t.azami_sure_saat > 0
+        ? t.azami_sure_saat * 3600
+        : null,
+  };
+}
+
+function formatMarsCoord(lon: number, lat: number): string {
+  const ns = lat >= 0 ? 'N' : 'S';
+  const ew = lon >= 0 ? 'E' : 'W';
+  return `${Math.abs(lat).toFixed(3)}° ${ns}, ${Math.abs(lon).toFixed(3)}° ${ew}`;
+}
+
+function hudSpan(text: string, className?: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
+}
 
 export interface RouteController {
   setTraverser(traverser: Traverser): void;
   /** Adds a point (science target/stop in auto-landing mode; start then stops in manual mode). */
   addPoint(lonLat: LonLat, name?: string): void;
+  /** Syncs the floating map alert banner when the side panel is collapsed/expanded. */
+  syncCollapsedAlert(): void;
 }
 
 export interface RouteOptions {
@@ -28,6 +65,14 @@ export interface RouteOptions {
   synthetic: boolean;
   /** Landing craft parameters from mobilite_parametreleri.json (drives backup separation). */
   landingCraft: LandingCraftParams | null;
+  /** All loaded traversers from mobilite_parametreleri.json (for multi-traverser comparison). */
+  traversers: Traverser[];
+  /** Predefined science stops from duraklar.json (for 1-click sample mission). */
+  stops: ScienceStop[];
+  /** Programmatically switches the active traverser in the selector radio group. */
+  onSelectTraverser?: (id: string) => void;
+  /** Reports startup terrain download progress to the main map status overlay. */
+  onStartupProgress?: (text: string) => void;
 }
 
 export function initRoute(
@@ -42,13 +87,27 @@ export function initRoute(
   const modeGroup = root.querySelector<HTMLElement>('#route-mode')!;
   const modeAutoBtn = root.querySelector<HTMLButtonElement>('#mode-auto')!;
   const modeManualBtn = root.querySelector<HTMLButtonElement>('#mode-manual')!;
+  const roundTripInput = root.querySelector<HTMLInputElement>('#opt-roundtrip')!;
+  const stopMinInput = root.querySelector<HTMLInputElement>('#opt-stop-min')!;
+  const allowNoDataInput = root.querySelector<HTMLInputElement>('#opt-allow-nodata')!;
   const hint = root.querySelector<HTMLElement>('#route-hint')!;
+  const sampleRow = root.querySelector<HTMLElement>('#route-sample-row')!;
+  const sampleButton = root.querySelector<HTMLButtonElement>('#route-sample')!;
   const message = root.querySelector<HTMLElement>('#route-message')!;
+  const progressWrap = root.querySelector<HTMLElement>('#load-progress')!;
+  const progressBar = root.querySelector<HTMLElement>('#load-progress-bar')!;
   const landingBox = root.querySelector<HTMLElement>('#landing-candidates')!;
   const results = root.querySelector<HTMLElement>('#route-results')!;
+  const compareDetails = root.querySelector<HTMLDetailsElement>('#route-compare')!;
+  const compareBody = root.querySelector<HTMLElement>('#route-compare-body')!;
   const undoButton = root.querySelector<HTMLButtonElement>('#route-undo')!;
   const clearButton = root.querySelector<HTMLButtonElement>('#route-clear')!;
   const downloadButton = root.querySelector<HTMLButtonElement>('#route-download')!;
+
+  const panelEl = document.getElementById('panel');
+  const panelToggleBtn = document.getElementById('panel-toggle');
+  const mapAlert = document.getElementById('map-alert');
+  const terrainHud = document.getElementById('terrain-hud');
 
   // ------------------------------------------------------------ state
   let traverser = initialTraverser;
@@ -61,14 +120,34 @@ export function initRoute(
   let lastResult: RouteSuccess | null = null;
   const markers: Marker[] = [];
   const landingMarkers: Marker[] = [];
+  let turnAroundMarker: Marker | null = null;
   let ready = false;
+  let startupDone = false;
   let elevationRequestedOnce = false;
   let requestId = 0;
+  let compareRequestId = 0;
+  let compareDirty = true;
+  let lastCompareRows: TraverserComparisonRow[] | null = null;
   let lastActionWasAdd = false;
   let pendingNotice = '';
+  let fitToResultOnce = false;
 
   // Minimum centre-to-centre distance between primary and backup landing zones (from JSON, never hardcoded).
   const minSeparationM = options.landingCraft?.guvenli_alan_capi_m ?? 0;
+
+  const validSampleStops = options.stops.filter((s) => geo.lonLatToIndex(s.konum[0], s.konum[1]) !== null);
+  sampleRow.hidden = validSampleStops.length === 0;
+
+  const currentStopWorkS = (): number => {
+    const mins = Number(stopMinInput.value);
+    if (!Number.isFinite(mins) || mins <= 0) return 0;
+    return Math.min(240, mins) * 60;
+  };
+
+  const invalidateComparison = (): void => {
+    compareDirty = true;
+    lastCompareRows = null;
+  };
 
   // ------------------------------------------------------------ map layers
   map.addSource(ROUTE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -96,10 +175,39 @@ export function initRoute(
   };
 
   // ------------------------------------------------------------ rendering
+  const syncCollapsedAlert = (): void => {
+    if (!mapAlert) return;
+    const isCollapsed = panelEl?.classList.contains('collapsed') ?? false;
+    const kind = message.dataset.kind;
+    const isImportant = !message.hidden && message.textContent !== '' && (kind === 'error' || kind === 'warn');
+    mapAlert.hidden = !(isCollapsed && isImportant);
+    if (!mapAlert.hidden) {
+      mapAlert.textContent = message.textContent;
+      mapAlert.dataset.kind = kind ?? 'error';
+    }
+  };
+
+  if (mapAlert) {
+    mapAlert.title = 'Click to open the route panel';
+    mapAlert.addEventListener('click', () => {
+      panelEl?.classList.remove('collapsed');
+      panelToggleBtn?.setAttribute('aria-expanded', 'true');
+      syncCollapsedAlert();
+    });
+  }
+
   const showMessage = (text: string, kind: 'info' | 'warn' | 'error' = 'info'): void => {
     message.textContent = text;
     message.dataset.kind = kind;
     message.hidden = text === '';
+    syncCollapsedAlert();
+  };
+
+  const clearTurnAroundMarker = (): void => {
+    if (turnAroundMarker) {
+      turnAroundMarker.remove();
+      turnAroundMarker = null;
+    }
   };
 
   const clearLandingUI = (): void => {
@@ -208,10 +316,78 @@ export function initRoute(
     updateHint();
   };
 
+  // ------------------------------------------------------------ worker
+  const worker = new Worker(new URL('./route-worker.ts', import.meta.url), { type: 'module' });
+  const send = (msg: ToWorker): void => worker.postMessage(msg);
+
+  const selectTraverserFromComparison = (id: string): void => {
+    if (id === traverser.id) return;
+    if (options.onSelectTraverser) {
+      options.onSelectTraverser(id);
+    } else {
+      const found = options.traversers.find((t) => t.id === id);
+      if (found) {
+        traverser = found;
+        lastActionWasAdd = false;
+        pendingNotice = '';
+        requestRoute();
+      }
+    }
+  };
+
+  const refreshComparison = (): void => {
+    if (!lastResult || waypoints.length === 0 || options.traversers.length < 2) {
+      compareDetails.hidden = true;
+      return;
+    }
+    compareDetails.hidden = false;
+    if (!compareDetails.open) return;
+
+    if (!compareDirty && lastCompareRows) {
+      renderComparison(compareBody, lastCompareRows, traverser.id, selectTraverserFromComparison);
+      return;
+    }
+
+    compareDirty = false;
+    renderComparison(compareBody, null, traverser.id, selectTraverserFromComparison);
+    send({
+      type: 'compare',
+      id: ++compareRequestId,
+      mode,
+      waypoints: [...waypoints],
+      minSeparationM,
+      roundTrip: roundTripInput.checked,
+      stopWorkS: currentStopWorkS(),
+      allowNoData: allowNoDataInput.checked,
+      entries: options.traversers.map((t) => ({
+        id: t.id,
+        name: t.ad_en,
+        traverser: toRouterTraverser(t),
+      })),
+    });
+  };
+
+  compareDetails.addEventListener('toggle', () => {
+    if (compareDetails.open) refreshComparison();
+  });
+
   const renderSummary = (result: RouteSuccess | null): void => {
+    clearTurnAroundMarker();
     lastResult = result && result.legs.length > 0 ? result : null;
     downloadButton.disabled = lastResult === null;
-    renderResults(results, result, traverser, grid.hucre_m, grid.egim_taban_uzunlugu_m);
+    renderResults(results, result, traverser, grid.egim_taban_uzunlugu_m);
+
+    if (lastResult && lastResult.turnAroundCell !== null) {
+      const el = document.createElement('div');
+      el.className = 'waypoint turnaround';
+      el.textContent = '!';
+      const limitLabel = traverser.azami_sure_saat ? `${traverser.azami_sure_saat} h` : 'max';
+      el.title = `Max mission duration (${limitLabel}) reached around ${Math.round(lastResult.turnAroundDist_m ?? 0)} m along the route`;
+      el.setAttribute('aria-label', el.title);
+      turnAroundMarker = new Marker({ element: el }).setLngLat(geo.indexToLonLat(lastResult.turnAroundCell)).addTo(map);
+    }
+
+    refreshComparison();
   };
 
   const syncModeButtons = (): void => {
@@ -219,19 +395,6 @@ export function initRoute(
     modeAutoBtn.classList.toggle('active', mode === 'auto-landing');
     modeManualBtn.classList.toggle('active', mode === 'manual');
   };
-
-  // ------------------------------------------------------------ worker
-  const worker = new Worker(new URL('./route-worker.ts', import.meta.url), { type: 'module' });
-  const send = (msg: ToWorker): void => worker.postMessage(msg);
-
-  const routerTraverser = (): RouterTraverser => ({
-    maxSlopeDeg: traverser.azami_egim_derece,
-    speedTable: traverser.hiz_tablosu.map((entry): [number, number] => [entry.egim_derece, entry.hiz_m_s]),
-    maxTimeS:
-      typeof traverser.azami_sure_saat === 'number' && Number.isFinite(traverser.azami_sure_saat) && traverser.azami_sure_saat > 0
-        ? traverser.azami_sure_saat * 3600
-        : null,
-  });
 
   const requestRoute = (): void => {
     renderMarkers();
@@ -247,12 +410,18 @@ export function initRoute(
       if (!elevationRequestedOnce) {
         showMessage(
           mode === 'auto-landing'
-            ? 'Loading elevation grid & finding safe landing sites…'
-            : 'Loading elevation grid & calculating route…',
+            ? 'Loading elevation data & finding safe landing sites…'
+            : 'Loading elevation data & calculating route…',
         );
       } else {
         showMessage(mode === 'auto-landing' ? 'Finding safe landing sites and route…' : 'Calculating route…');
       }
+    } else {
+      // Manual mode with only the start point placed so far
+      clearLandingUI();
+      setLine(null);
+      renderSummary(null);
+      showMessage('');
     }
     send({
       type: 'route',
@@ -261,14 +430,109 @@ export function initRoute(
       waypoints: [...waypoints],
       chosenLandingCell,
       minSeparationM,
-      traverser: routerTraverser(),
+      roundTrip: roundTripInput.checked,
+      stopWorkS: currentStopWorkS(),
+      allowNoData: allowNoDataInput.checked,
+      traverser: toRouterTraverser(traverser),
     });
   };
 
+  // ------------------------------------------------------------ terrain HUD (B3)
+  let pendingProbeLonLat: LonLat | null = null;
+  let lastProbeLonLat: LonLat | null = null;
+  let probeRaf = false;
+
+  const scheduleProbe = (lonLat: LonLat): void => {
+    pendingProbeLonLat = lonLat;
+    if (probeRaf) return;
+    probeRaf = true;
+    requestAnimationFrame(() => {
+      probeRaf = false;
+      if (!ready || !pendingProbeLonLat) return;
+      const [lon, lat] = pendingProbeLonLat;
+      const cell = geo.lonLatToIndex(lon, lat);
+      if (cell === null) {
+        if (terrainHud) terrainHud.hidden = true;
+        return;
+      }
+      lastProbeLonLat = [lon, lat];
+      send({ type: 'probe', cell });
+    });
+  };
+
+  map.on('mousemove', (event: MapMouseEvent) => scheduleProbe([event.lngLat.lng, event.lngLat.lat]));
+  map.getCanvas().addEventListener('mouseleave', () => {
+    if (terrainHud) terrainHud.hidden = true;
+  });
+
+  const renderProbeHud = (msg: Extract<FromWorker, { type: 'probe-result' }>): void => {
+    if (!terrainHud || !lastProbeLonLat) return;
+    terrainHud.replaceChildren();
+
+    const parts: HTMLSpanElement[] = [];
+    parts.push(hudSpan(formatMarsCoord(lastProbeLonLat[0], lastProbeLonLat[1]), 'hud-muted'));
+
+    if (msg.slopeDeg === null) {
+      parts.push(hudSpan('Slope: no data', 'hud-muted'));
+    } else {
+      const prefix = msg.slopeAtOrAboveMaxByte ? '≥ ' : '';
+      const overLimit = msg.slopeDeg > traverser.azami_egim_derece;
+      parts.push(hudSpan(`Slope: ${prefix}${msg.slopeDeg.toFixed(1)}°`, overLimit ? 'hud-bad' : undefined));
+    }
+
+    if (msg.hazardClass === 0) parts.push(hudSpan('Hazard: Free', 'hud-ok'));
+    else if (msg.hazardClass === 1) parts.push(hudSpan('Hazard: Caution', 'hud-warn'));
+    else if (msg.hazardClass === 2) parts.push(hudSpan('Hazard: Forbidden', 'hud-bad'));
+    else parts.push(hudSpan('Hazard: No data', 'hud-muted'));
+
+    if (msg.landingClass !== null) {
+      if (msg.landingClass === 0) parts.push(hudSpan('Landing: Suitable', 'hud-ok'));
+      else if (msg.landingClass === 1) parts.push(hudSpan('Landing: Marginal', 'hud-warn'));
+      else if (msg.landingClass === 2) parts.push(hudSpan('Landing: Unsuitable', 'hud-muted'));
+      else parts.push(hudSpan('Landing: No data', 'hud-muted'));
+    }
+
+    if (msg.elevLoaded) {
+      parts.push(
+        msg.elevM !== null ? hudSpan(`Elev: ${Math.round(msg.elevM)} m`) : hudSpan('Elev: no data', 'hud-muted'),
+      );
+    }
+
+    parts.forEach((part, idx) => {
+      if (idx > 0) terrainHud.append(hudSpan(' · ', 'hud-muted'));
+      terrainHud.append(part);
+    });
+    terrainHud.hidden = false;
+  };
+
+  // ------------------------------------------------------------ worker messages
   worker.onmessage = (event: MessageEvent<FromWorker>) => {
     const msg = event.data;
+    if (msg.type === 'load-progress') {
+      progressWrap.hidden = false;
+      progressBar.style.width = `${msg.percent}%`;
+      if (msg.phase === 'terrain') {
+        const text =
+          msg.totalBytes > 0
+            ? `Loading terrain data… ${msg.percent}% (${fmtMB(msg.loadedBytes)} / ${fmtMB(msg.totalBytes)} MB)`
+            : `Loading terrain data… ${msg.percent}%`;
+        showMessage(text, 'info');
+        if (!startupDone) options.onStartupProgress?.(text);
+      } else {
+        const text =
+          msg.totalBytes > 0
+            ? `Loading elevation data… ${msg.percent}% (${fmtMB(msg.loadedBytes)} / ${fmtMB(msg.totalBytes)} MB)`
+            : `Loading elevation data… ${msg.percent}%`;
+        showMessage(text, 'info');
+      }
+      return;
+    }
+
     if (msg.type === 'ready') {
       ready = true;
+      startupDone = true;
+      progressWrap.hidden = true;
+      options.onStartupProgress?.('');
       hasLandingGrid = msg.hasLanding;
       mode = hasLandingGrid ? 'auto-landing' : 'manual';
       syncModeButtons();
@@ -276,17 +540,44 @@ export function initRoute(
       requestRoute();
       return;
     }
+
     if (msg.type === 'init-error') {
+      startupDone = true;
+      progressWrap.hidden = true;
+      options.onStartupProgress?.('');
       showMessage(`Route planning is unavailable: ${msg.message}`, 'error');
       return;
     }
-    if (msg.id !== requestId) return; // stale answer
+
+    if (msg.type === 'probe-result') {
+      renderProbeHud(msg);
+      return;
+    }
+
+    if (msg.type === 'compare-result') {
+      if (msg.id !== compareRequestId) return;
+      lastCompareRows = msg.rows;
+      if (compareDetails.open) {
+        renderComparison(compareBody, lastCompareRows, traverser.id, selectTraverserFromComparison);
+      }
+      return;
+    }
+
+    if (msg.id !== requestId) return; // stale route answer
+    progressWrap.hidden = true;
 
     if (msg.ok) {
       if (msg.legs.length > 0) elevationRequestedOnce = true;
       renderLandingCandidates(msg.landingCandidates, msg.activeLandingCell);
       setLine(msg.path);
       renderSummary(msg);
+      if (fitToResultOnce && msg.path.length > 0) {
+        fitToResultOnce = false;
+        const b = new LngLatBounds();
+        for (let i = 0; i < msg.path.length; i++) b.extend(geo.indexToLonLat(msg.path[i]));
+        for (const cand of msg.landingCandidates) b.extend(geo.indexToLonLat(cand.cell));
+        map.fitBounds(b, { padding: 56, maxZoom: 14 });
+      }
       if (pendingNotice) showMessage(pendingNotice, 'error');
       else showMessage('');
       pendingNotice = '';
@@ -294,9 +585,8 @@ export function initRoute(
       return;
     }
 
-    clearLandingUI();
-    setLine(null);
-    renderSummary(null);
+    fitToResultOnce = false;
+    const noDataClause = !allowNoDataInput.checked ? ', unmapped terrain,' : '';
 
     if (msg.reason === 'blocked-waypoint') {
       const stopNum = mode === 'auto-landing' ? msg.waypointIndex + 1 : msg.waypointIndex;
@@ -304,49 +594,110 @@ export function initRoute(
       const why =
         msg.why === 'forbidden'
           ? 'is in a forbidden area'
+          : msg.why === 'no-data'
+          ? 'is in an unmapped (no-data) area while crossing unmapped terrain is turned off'
           : `is on a slope steeper than the ${traverser.azami_egim_derece}° limit for "${traverser.ad_en}"`;
       const justAdded = lastActionWasAdd && msg.waypointIndex === waypoints.length - 1;
       if (justAdded) {
         waypoints.pop();
         names.pop();
         lastActionWasAdd = false;
+        invalidateComparison();
         const notice = `That point ${why}, so it was not added. Pick another point.`;
-        requestRoute();
-        if (waypoints.length > 0) pendingNotice = notice;
-        showMessage(notice, 'error');
+        if (waypoints.length > 0) {
+          pendingNotice = notice;
+          showMessage(notice, 'error');
+          requestRoute();
+        } else {
+          clearLandingUI();
+          setLine(null);
+          renderSummary(null);
+          renderMarkers();
+          showMessage(notice, 'error');
+        }
       } else {
         lastActionWasAdd = false;
-        showMessage(`${name} ${why}. Remove it or choose another traverser.`, 'error');
+        clearLandingUI();
+        setLine(null);
+        renderSummary(null);
+        showMessage(`${name} ${why}. Remove it, adjust mission options, or choose another traverser.`, 'error');
       }
     } else if (msg.reason === 'no-landing') {
-      lastActionWasAdd = false;
       const limitText =
         msg.withinRangeChecked && traverser.azami_sure_saat
-          ? ` within the ${traverser.azami_sure_saat} h range of "${traverser.ad_en}"`
+          ? ` within the ${traverser.azami_sure_saat} h mission budget of "${traverser.ad_en}"`
           : '';
-      showMessage(
-        `No suitable or marginal landing zone can reach Stop 1${limitText} without crossing forbidden terrain or slopes above ${traverser.azami_egim_derece}°. Try another target or traverser.`,
-        'error',
-      );
+      if (lastActionWasAdd && waypoints.length === 1) {
+        waypoints.pop();
+        names.pop();
+        chosenLandingCell = null;
+        lastActionWasAdd = false;
+        invalidateComparison();
+        clearLandingUI();
+        setLine(null);
+        renderSummary(null);
+        renderMarkers();
+        showMessage(
+          `No suitable or marginal landing zone can reach that target${limitText} without crossing forbidden terrain${noDataClause} or slopes above ${traverser.azami_egim_derece}°. Pick another target or traverser.`,
+          'error',
+        );
+      } else {
+        lastActionWasAdd = false;
+        clearLandingUI();
+        setLine(null);
+        renderSummary(null);
+        showMessage(
+          `No suitable or marginal landing zone can reach Stop 1${limitText} without crossing forbidden terrain${noDataClause} or slopes above ${traverser.azami_egim_derece}°. Try another target, mission setting, or traverser.`,
+          'error',
+        );
+      }
     } else {
-      lastActionWasAdd = false;
-      const from =
-        mode === 'auto-landing'
-          ? msg.legIndex === 0
-            ? 'the landing zone'
-            : `stop ${msg.legIndex}`
-          : msg.legIndex === 0
-          ? 'the start'
-          : `stop ${msg.legIndex}`;
-      showMessage(
-        `No route found from ${from} to stop ${msg.legIndex + 1}: every path is blocked by forbidden terrain or slopes above the ${traverser.azami_egim_derece}° limit for "${traverser.ad_en}".`,
-        'error',
-      );
+      // msg.reason === 'no-route'
+      if (lastActionWasAdd && waypoints.length > 1) {
+        waypoints.pop();
+        names.pop();
+        lastActionWasAdd = false;
+        invalidateComparison();
+        const notice = `No passable route could reach that point (blocked by forbidden terrain${noDataClause} or slopes above ${traverser.azami_egim_derece}° for "${traverser.ad_en}"), so it was not added.`;
+        pendingNotice = notice;
+        showMessage(notice, 'error');
+        requestRoute();
+      } else {
+        lastActionWasAdd = false;
+        clearLandingUI();
+        setLine(null);
+        renderSummary(null);
+        if (msg.isReturnLeg) {
+          const dest = mode === 'auto-landing' ? 'the landing zone' : 'the start';
+          showMessage(
+            `No return route found back to ${dest}: every path is blocked by forbidden terrain${noDataClause} or slopes above ${traverser.azami_egim_derece}°.`,
+            'error',
+          );
+        } else {
+          const from =
+            mode === 'auto-landing'
+              ? msg.legIndex === 0
+                ? 'the landing zone'
+                : `Stop ${msg.legIndex}`
+              : msg.legIndex === 0
+              ? 'the start'
+              : `Stop ${msg.legIndex}`;
+          showMessage(
+            `No route found from ${from} to Stop ${msg.legIndex + 1}: every path is blocked by forbidden terrain${noDataClause} or slopes above the ${traverser.azami_egim_derece}° limit for "${traverser.ad_en}".`,
+            'error',
+          );
+        }
+      }
     }
   };
-  worker.onerror = (event) => showMessage(`Route planning failed: ${event.message}`, 'error');
+  worker.onerror = (event) => {
+    progressWrap.hidden = true;
+    options.onStartupProgress?.('');
+    showMessage(`Route planning failed: ${event.message}`, 'error');
+  };
 
-  showMessage('Loading the cost and landing grids…');
+  showMessage('Loading terrain data… 0%');
+  options.onStartupProgress?.('Loading terrain data… 0%');
   send({
     type: 'init',
     slopeUrl: absoluteUrl(SLOPE_URL),
@@ -372,15 +723,27 @@ export function initRoute(
     chosenLandingCell = null;
     lastActionWasAdd = false;
     pendingNotice = '';
+    invalidateComparison();
     syncModeButtons();
     requestRoute();
   };
   modeAutoBtn.addEventListener('click', () => setMode('auto-landing'));
   modeManualBtn.addEventListener('click', () => setMode('manual'));
 
+  const onMissionOptionChange = (): void => {
+    lastActionWasAdd = false;
+    pendingNotice = '';
+    invalidateComparison();
+    requestRoute();
+  };
+  roundTripInput.addEventListener('change', onMissionOptionChange);
+  stopMinInput.addEventListener('change', onMissionOptionChange);
+  allowNoDataInput.addEventListener('change', onMissionOptionChange);
+
   const addPoint = (lonLat: LonLat, name?: string): void => {
+    scheduleProbe(lonLat);
     if (!ready) {
-      showMessage('Cost grid is still loading; please wait a moment.', 'info');
+      showMessage('Terrain data is still loading; please wait a moment.', 'info');
       return;
     }
     const cell = geo.lonLatToIndex(lonLat[0], lonLat[1]);
@@ -394,15 +757,46 @@ export function initRoute(
     names.push(name ?? null);
     lastActionWasAdd = true;
     pendingNotice = '';
+    invalidateComparison();
     requestRoute();
   };
   map.on('click', (event: MapMouseEvent) => addPoint([event.lngLat.lng, event.lngLat.lat]));
+
+  sampleButton.addEventListener('click', () => {
+    if (!ready) {
+      showMessage('Terrain data is still loading; please wait a moment.', 'info');
+      return;
+    }
+    if (validSampleStops.length === 0) return;
+    waypoints.length = 0;
+    names.length = 0;
+    chosenLandingCell = null;
+    lastActionWasAdd = false;
+    pendingNotice = '';
+    mode = hasLandingGrid ? 'auto-landing' : 'manual';
+    syncModeButtons();
+
+    const pickCount = Math.min(2, validSampleStops.length);
+    for (let i = 0; i < pickCount; i++) {
+      const stop = validSampleStops[i];
+      const cell = geo.lonLatToIndex(stop.konum[0], stop.konum[1]);
+      if (cell !== null) {
+        waypoints.push(cell);
+        names.push(stop.ad_en);
+      }
+    }
+    invalidateComparison();
+    fitToResultOnce = true;
+    requestRoute();
+  });
+
   undoButton.addEventListener('click', () => {
     waypoints.pop();
     names.pop();
     if (waypoints.length === 0) chosenLandingCell = null;
     lastActionWasAdd = false;
     pendingNotice = '';
+    invalidateComparison();
     requestRoute();
   });
   clearButton.addEventListener('click', () => {
@@ -411,6 +805,7 @@ export function initRoute(
     chosenLandingCell = null;
     lastActionWasAdd = false;
     pendingNotice = '';
+    invalidateComparison();
     requestRoute();
   });
 
@@ -458,6 +853,8 @@ export function initRoute(
         grid_cell_m: grid.hucre_m,
         slope_baseline_m: grid.egim_taban_uzunlugu_m ?? null,
         mode: result.mode,
+        round_trip: result.roundTrip,
+        allow_no_data: allowNoDataInput.checked,
       },
       features: [
         {
@@ -467,11 +864,18 @@ export function initRoute(
             traverser_id: traverser.id,
             traverser_name: traverser.ad_en,
             marginal_landing: result.marginalLanding,
+            round_trip: result.roundTrip,
             distance_m: round(result.distance_m, 1),
             estimated_time_s: Math.round(result.time_s),
-            no_data_m: round(result.noDataCells * grid.hucre_m, 1),
-            caution_m: round(result.cautionCells * grid.hucre_m, 1),
-            legs: result.legs.map((leg) => ({ distance_m: round(leg.distance_m, 1), estimated_time_s: Math.round(leg.time_s) })),
+            travel_time_s: Math.round(result.travelTime_s),
+            stop_work_time_s: Math.round(result.stopTime_s),
+            no_data_m: round(result.noDataM, 1),
+            caution_m: round(result.cautionM, 1),
+            legs: result.legs.map((leg) => ({
+              distance_m: round(leg.distance_m, 1),
+              estimated_time_s: Math.round(leg.time_s),
+              is_return: Boolean(leg.isReturn),
+            })),
           },
           geometry: { type: 'LineString', coordinates: Array.from(result.path, coordinate) },
         },
@@ -493,6 +897,7 @@ export function initRoute(
 
   return {
     addPoint,
+    syncCollapsedAlert,
     setTraverser(next) {
       traverser = next;
       lastActionWasAdd = false;

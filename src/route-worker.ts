@@ -2,14 +2,24 @@
 //
 // Routing Web Worker:
 //   1) Compact binary cost grids: Uint8 ceiling-quantized slope + little-endian Int16 elevation
-//      (with Float32 fallback for older datasets), Uint8 hazard & landing grids.
-//   2) 256-entry per-traverser speed lookup table (zero full-grid cellSpeed allocation).
+//      (lazy-loaded on 1st route, with streaming download progress), Uint8 hazard & landing grids.
+//   2) 256-entry per-traverser speed lookup tables (zero full-grid cellSpeed allocation).
 //   3) Windowed 8-connected A* with border-touch re-expansion, plus windowed Reverse-Dijkstra
-//      landing recommender with range clipping and progressive boundary-verified expansion.
+//      landing recommender with range clipping, round-trip return, no-data toggle, cell probing,
+//      and multi-traverser comparison.
 
 /// <reference lib="webworker" />
 
-import type { BlockReason, FromWorker, LandingCandidate, RouteLeg, RouterTraverser, ToWorker } from './route-types';
+import type {
+  BlockReason,
+  FromWorker,
+  LandingCandidate,
+  RouteFailure,
+  RouteLeg,
+  RouterTraverser,
+  ToWorker,
+  TraverserComparisonRow,
+} from './route-types';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const post = (message: FromWorker, transfer: Transferable[] = []) => ctx.postMessage(message, transfer);
@@ -55,20 +65,18 @@ let hazard: Uint8Array | null = null;
 /** Optional landing suitability grid (inis.bin): 0 suitable, 1 marginal, 2 forbidden, 255 no data. */
 let landing: Uint8Array | null = null;
 
-// 256-entry speed lookup tables (~2 KB total; replaces the full-grid cellSpeed array)
+// 256-entry speed lookup tables (~3 KB total; replaces the full-grid cellSpeed array)
 let speedKey = '';
 const speedFreeLut = new Float32Array(256);
 const speedCautionLut = new Float32Array(256);
+const speedNoDataHazardLut = new Float32Array(256);
 let slowestSpeed = 0;
 let maxSpeed = 0;
 let currentMaxSlopeDeg = 0;
+let currentAllowNoData = false;
 let currentSpeedTable: [number, number][] = [];
 
 // Window-scoped stamp search state (~11 B per window cell: 8 B Float64 gScore + 1 B parentDir + 2 B Uint16 stamp)
-// For a run with base `openMark = searchId`:
-//   stamp[i] === openMark     -> discovered (open), gScore[i] & parentDir[i] are valid
-//   stamp[i] === openMark + 1 -> expanded (closed), gScore[i] & parentDir[i] are valid
-//   otherwise                 -> untouched in this search
 let gScore = new Float64Array(0);
 let parentDir = new Uint8Array(0);
 let stamp = new Uint16Array(0);
@@ -123,33 +131,97 @@ function decodeFloat32LE(buf: ArrayBuffer): Float32Array {
   return out;
 }
 
-async function fetchRequiredBinary(url: string, expectedBytes: number, label: string): Promise<ArrayBuffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Could not load ${label} (HTTP ${res.status})`);
-  const ct = res.headers.get('content-type') ?? '';
-  if (ct.includes('text/html')) throw new Error(`Could not load ${label} (received HTML instead of binary data)`);
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength !== expectedBytes) {
-    throw new Error(`${label} is ${buf.byteLength} bytes, expected ${expectedBytes}`);
-  }
-  return buf;
+function createProgressTracker(phase: 'terrain' | 'elevation', initialTotalBytes: number) {
+  let loadedBytes = 0;
+  let totalBytes = initialTotalBytes;
+  let lastPercent = -1;
+  let lastPostMs = 0;
+
+  const emit = (force = false) => {
+    if (totalBytes <= 0) return;
+    const percent = Math.min(100, Math.round((loadedBytes / totalBytes) * 100));
+    const now = performance.now();
+    if (!force && percent - lastPercent < 2 && now - lastPostMs < 80) return;
+    lastPercent = percent;
+    lastPostMs = now;
+    post({ type: 'load-progress', phase, loadedBytes, totalBytes, percent });
+  };
+
+  emit(true);
+
+  return {
+    addBytes(delta: number) {
+      loadedBytes += delta;
+      emit(false);
+    },
+    dropOptionalBytes(bytes: number) {
+      totalBytes = Math.max(loadedBytes, totalBytes - bytes);
+      emit(true);
+    },
+    finish() {
+      loadedBytes = totalBytes;
+      emit(true);
+    },
+  };
 }
 
-async function fetchOptionalBinary(url: string, expectedBytes: number, label: string): Promise<ArrayBuffer | null> {
+async function fetchBinaryWithProgress(
+  url: string,
+  expectedBytes: number,
+  label: string,
+  optional: boolean,
+  onBytes: (delta: number) => void,
+  onMissingOptional?: () => void,
+): Promise<ArrayBuffer | null> {
   let res: Response;
   try {
     res = await fetch(url);
-  } catch {
-    return null;
+  } catch (err) {
+    if (optional) {
+      onMissingOptional?.();
+      return null;
+    }
+    throw err;
   }
-  if (res.status === 404 || !res.ok) return null;
+
   const ct = res.headers.get('content-type') ?? '';
-  // Static hosts sometimes serve index.html with HTTP 200 for missing files.
-  if (ct.includes('text/html')) return null;
+  if (!res.ok || ct.includes('text/html')) {
+    if (optional && (res.status === 404 || !res.ok || ct.includes('text/html'))) {
+      onMissingOptional?.();
+      return null;
+    }
+    if (!res.ok) throw new Error(`Could not load ${label} (HTTP ${res.status})`);
+    throw new Error(`Could not load ${label} (received HTML instead of binary data)`);
+  }
+
+  if (res.body && typeof res.body.getReader === 'function') {
+    const out = new Uint8Array(expectedBytes);
+    const reader = res.body.getReader();
+    let offset = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.byteLength > 0) {
+        if (offset + value.byteLength > expectedBytes) {
+          await reader.cancel().catch(() => {});
+          throw new Error(`${label} exceeds expected ${expectedBytes} bytes`);
+        }
+        out.set(value, offset);
+        offset += value.byteLength;
+        onBytes(value.byteLength);
+      }
+    }
+    if (offset !== expectedBytes) {
+      throw new Error(`${label} is ${offset} bytes, expected ${expectedBytes}`);
+    }
+    return out.buffer;
+  }
+
   const buf = await res.arrayBuffer();
   if (buf.byteLength !== expectedBytes) {
     throw new Error(`${label} is ${buf.byteLength} bytes, expected ${expectedBytes}`);
   }
+  onBytes(buf.byteLength);
   return buf;
 }
 
@@ -181,24 +253,35 @@ async function init(msg: Extract<ToWorker, { type: 'init' }>): Promise<void> {
 
   const cells = width * height;
   const slopeBytes = slopeType === 'uint8' ? cells : cells * 4;
+  const progress = createProgressTracker('terrain', slopeBytes + cells + cells);
 
   // yukseklik.bin is intentionally NOT downloaded at startup; it is fetched lazily
   // on the first route request so initial page load avoids pulling ~46 MB extra.
   const [slopeBuf, hazardBuf, landingBuf] = await Promise.all([
-    fetchRequiredBinary(msg.slopeUrl, slopeBytes, `egim.bin (${width} x ${height} ${slopeType})`),
-    fetchRequiredBinary(msg.hazardUrl, cells, `tehlike.bin (${width} x ${height} uint8)`),
-    fetchOptionalBinary(msg.landingUrl, cells, `inis.bin (${width} x ${height} uint8)`),
+    fetchBinaryWithProgress(msg.slopeUrl, slopeBytes, `egim.bin (${width} x ${height} ${slopeType})`, false, (d) =>
+      progress.addBytes(d),
+    ),
+    fetchBinaryWithProgress(msg.hazardUrl, cells, `tehlike.bin (${width} x ${height} uint8)`, false, (d) => progress.addBytes(d)),
+    fetchBinaryWithProgress(
+      msg.landingUrl,
+      cells,
+      `inis.bin (${width} x ${height} uint8)`,
+      true,
+      (d) => progress.addBytes(d),
+      () => progress.dropOptionalBytes(cells),
+    ),
   ]);
+  progress.finish();
 
   if (slopeType === 'uint8') {
-    slopeU8 = new Uint8Array(slopeBuf);
+    slopeU8 = new Uint8Array(slopeBuf!);
     slopeF32 = null;
   } else {
-    slopeF32 = decodeFloat32LE(slopeBuf);
+    slopeF32 = decodeFloat32LE(slopeBuf!);
     slopeU8 = null;
   }
 
-  hazard = new Uint8Array(hazardBuf);
+  hazard = new Uint8Array(hazardBuf!);
   validateClassGrid(hazard, 'tehlike.bin');
 
   if (landingBuf) {
@@ -234,12 +317,17 @@ function ensureElevationLoaded(): Promise<void> {
   if (!elevLoadPromise) {
     const cells = width * height;
     const elevBytes = elevType === 'int16' ? cells * 2 : cells * 4;
-    elevLoadPromise = fetchOptionalBinary(
+    const progress = createProgressTracker('elevation', elevBytes);
+    elevLoadPromise = fetchBinaryWithProgress(
       elevationUrl,
       elevBytes,
       `yukseklik.bin (${width} x ${height} ${elevType})`,
+      true,
+      (d) => progress.addBytes(d),
+      () => progress.dropOptionalBytes(elevBytes),
     )
       .then((elevBuf) => {
+        progress.finish();
         if (elevBuf) {
           if (elevType === 'int16') {
             elevI16 = decodeInt16LE(elevBuf);
@@ -304,10 +392,11 @@ function speedAtSlope(table: [number, number][], deg: number): number {
   return table[table.length - 1][1];
 }
 
-function prepareSpeeds(traverser: RouterTraverser): void {
+function prepareSpeeds(traverser: RouterTraverser, allowNoData = false): void {
   const key = JSON.stringify({
     maxSlopeDeg: traverser.maxSlopeDeg,
     speedTable: traverser.speedTable,
+    allowNoData,
     slopeType,
     slopeScale,
     slopeNoData,
@@ -317,21 +406,26 @@ function prepareSpeeds(traverser: RouterTraverser): void {
   slowestSpeed = Math.min(...table.map((entry) => entry[1]));
   maxSpeed = Math.max(...table.map((entry) => entry[1]));
   currentMaxSlopeDeg = traverser.maxSlopeDeg;
+  currentAllowNoData = allowNoData;
   currentSpeedTable = table;
 
   if (slopeType === 'uint8') {
+    const noDataSpeed = allowNoData ? slowestSpeed : 0;
     for (let b = 0; b < 256; b++) {
       if (b === slopeNoData) {
-        speedFreeLut[b] = slowestSpeed;
-        speedCautionLut[b] = slowestSpeed;
+        speedFreeLut[b] = noDataSpeed;
+        speedCautionLut[b] = noDataSpeed;
+        speedNoDataHazardLut[b] = noDataSpeed;
       } else {
         const deg = b * slopeScale;
         if (deg > currentMaxSlopeDeg) {
           speedFreeLut[b] = 0;
           speedCautionLut[b] = 0;
+          speedNoDataHazardLut[b] = 0;
         } else {
           speedFreeLut[b] = speedAtSlope(table, deg);
           speedCautionLut[b] = slowestSpeed;
+          speedNoDataHazardLut[b] = noDataSpeed;
         }
       }
     }
@@ -342,21 +436,26 @@ function prepareSpeeds(traverser: RouterTraverser): void {
 function cellSpeedAt(i: number): number {
   const h = hazard![i];
   if (slopeU8) {
-    if (h === HAZARD_FREE) return speedFreeLut[slopeU8[i]];
+    const b = slopeU8[i];
+    if (h === HAZARD_FREE) return speedFreeLut[b];
     if (h === HAZARD_FORBIDDEN) return 0;
-    return speedCautionLut[slopeU8[i]];
+    if (h === HAZARD_CAUTION) return speedCautionLut[b];
+    return speedNoDataHazardLut[b];
   }
   if (h === HAZARD_FORBIDDEN) return 0;
   const deg = slopeDegAt(i);
   const noSlope = Number.isNaN(deg);
   if (!noSlope && deg > currentMaxSlopeDeg) return 0;
-  if (noSlope || h === HAZARD_CAUTION || h === HAZARD_NODATA) return slowestSpeed;
+  if (noSlope || h === HAZARD_NODATA) return currentAllowNoData ? slowestSpeed : 0;
+  if (h === HAZARD_CAUTION) return slowestSpeed;
   return speedAtSlope(currentSpeedTable, deg);
 }
 
 function blockReason(i: number): BlockReason | null {
   if (cellSpeedAt(i) > 0) return null;
-  return hazard![i] === HAZARD_FORBIDDEN ? 'forbidden' : 'too-steep';
+  if (hazard![i] === HAZARD_FORBIDDEN) return 'forbidden';
+  if (!currentAllowNoData && isNoData(i)) return 'no-data';
+  return 'too-steep';
 }
 
 // ------------------------------------------------------------ binary heap
@@ -512,9 +611,8 @@ function runWindowedAStar(
 
 /**
  * Windowed A* from `start` to `goal`. Starts inside a compact padded corridor;
- * if no path is found or the found path touches an unclipped window boundary
- * (indicating a potentially faster detour outside the window), doubles the
- * window margin and retries up to the full grid.
+ * if no path is found or the found path touches an unclipped window boundary,
+ * doubles the window margin and retries up to the full grid.
  */
 function findPath(start: number, goal: number): number[] | null {
   if (start === goal) return [start];
@@ -559,7 +657,6 @@ function findPath(start: number, goal: number): number[] | null {
 }
 
 interface DiscoveredLanding extends LandingCandidate {
-  /** Path from this landing cell to the primary target stop. */
   pathToTarget: number[];
 }
 
@@ -575,18 +672,12 @@ function farFromPicked(cell: number, picked: DiscoveredLanding[], minSepM: numbe
   return true;
 }
 
-/**
- * Windowed Reverse Dijkstra outward from `targetCell`. Clipped to the traverser's
- * maximum travel range (and grid bounds), starting with a compact window and
- * expanding only if the search reaches an unclipped window boundary before
- * provably locking 3 separated class-0 landing sites.
- */
 function suggestLandingSites(
   targetCell: number,
   maxTimeS: number,
   minSeparationM: number,
 ): { candidates: DiscoveredLanding[]; marginal: boolean } | null {
-  if (!landing) return null;
+  if (!landing || maxTimeS < 0) return null;
   const tCol = targetCell % width;
   const tRow = (targetCell - tCol) / width;
   const diagonal = cellM * Math.SQRT2;
@@ -710,87 +801,183 @@ function measure(path: number[]): RouteLeg {
   return { distance_m: distance, time_s: time };
 }
 
+interface MissionPlanOk {
+  ok: true;
+  effectiveMode: 'manual' | 'auto-landing';
+  landingCandidates: LandingCandidate[];
+  activeLandingCell: number | null;
+  marginalLanding: boolean;
+  full: number[];
+  stopCountsInFull: Map<number, number>;
+  legs: RouteLeg[];
+  distance_m: number;
+  travelTime_s: number;
+  stopTime_s: number;
+  time_s: number;
+}
+
+type MissionPlanFail = RouteFailure extends infer U ? (U extends RouteFailure ? Omit<U, 'type' | 'id'> : never) : never;
+type MissionPlanResult = MissionPlanOk | MissionPlanFail;
+
+function planMission(
+  mode: 'manual' | 'auto-landing',
+  waypoints: number[],
+  chosenLandingCell: number | null | undefined,
+  minSeparationM: number,
+  explicitMaxLandingTimeS: number | null | undefined,
+  roundTrip: boolean,
+  stopWorkS: number,
+  allowNoData: boolean,
+  traverser: RouterTraverser,
+): MissionPlanResult {
+  prepareSpeeds(traverser, allowNoData);
+
+  for (let w = 0; w < waypoints.length; w++) {
+    const why = blockReason(waypoints[w]);
+    if (why) return { ok: false, reason: 'blocked-waypoint', waypointIndex: w, why };
+  }
+
+  const effectiveMode: 'manual' | 'auto-landing' = mode === 'auto-landing' && landing ? 'auto-landing' : 'manual';
+  const stopCount = effectiveMode === 'auto-landing' ? waypoints.length : Math.max(0, waypoints.length - 1);
+  const perStopS = Math.max(0, Number.isFinite(stopWorkS) ? stopWorkS : 0);
+  const stopTime_s = stopCount * perStopS;
+
+  let landingCandidates: LandingCandidate[] = [];
+  let activeLandingCell: number | null = null;
+  let marginalLanding = false;
+  const full: number[] = [];
+  const stopCountsInFull = new Map<number, number>();
+  const addStopAt = (idx: number) => stopCountsInFull.set(idx, (stopCountsInFull.get(idx) ?? 0) + 1);
+  const legs: RouteLeg[] = [];
+
+  if (effectiveMode === 'auto-landing' && landing && waypoints.length > 0) {
+    let maxLandingS = Infinity;
+    if (explicitMaxLandingTimeS !== undefined) {
+      if (typeof explicitMaxLandingTimeS === 'number' && Number.isFinite(explicitMaxLandingTimeS) && explicitMaxLandingTimeS > 0) {
+        maxLandingS = explicitMaxLandingTimeS;
+      }
+    } else if (typeof traverser.maxTimeS === 'number' && Number.isFinite(traverser.maxTimeS) && traverser.maxTimeS > 0) {
+      const availTravelS = traverser.maxTimeS - stopTime_s;
+      if (availTravelS <= 0) {
+        return { ok: false, reason: 'no-landing', withinRangeChecked: true };
+      }
+      // By triangle inequality on symmetric undirected edge costs, any round-trip visiting Stop 1
+      // takes at least 2 * time(Landing -> Stop 1), halving the Reverse-Dijkstra search radius!
+      maxLandingS = roundTrip ? availTravelS / 2 : availTravelS;
+    }
+
+    const found = suggestLandingSites(waypoints[0], maxLandingS, minSeparationM);
+    if (!found) {
+      return { ok: false, reason: 'no-landing', withinRangeChecked: Number.isFinite(maxLandingS) };
+    }
+
+    marginalLanding = found.marginal;
+    landingCandidates = found.candidates.map(({ cell, tier, distance_m, time_s }) => ({ cell, tier, distance_m, time_s }));
+
+    const picked =
+      (chosenLandingCell != null ? found.candidates.find((c) => c.cell === chosenLandingCell) : undefined) ??
+      found.candidates[0];
+    activeLandingCell = picked.cell;
+
+    full.push(...picked.pathToTarget);
+    addStopAt(full.length - 1);
+    legs.push({ distance_m: picked.distance_m, time_s: picked.time_s });
+
+    for (let leg = 0; leg + 1 < waypoints.length; leg++) {
+      const path = findPath(waypoints[leg], waypoints[leg + 1]);
+      if (!path) return { ok: false, reason: 'no-route', legIndex: leg + 1 };
+      legs.push(measure(path));
+      for (let k = 1; k < path.length; k++) full.push(path[k]);
+      addStopAt(full.length - 1);
+    }
+  } else {
+    if (waypoints.length > 0) full.push(waypoints[0]);
+    for (let leg = 0; leg + 1 < waypoints.length; leg++) {
+      const path = findPath(waypoints[leg], waypoints[leg + 1]);
+      if (!path) return { ok: false, reason: 'no-route', legIndex: leg };
+      legs.push(measure(path));
+      for (let k = 1; k < path.length; k++) full.push(path[k]);
+      addStopAt(full.length - 1);
+    }
+  }
+
+  if (roundTrip && legs.length > 0) {
+    const originCell = effectiveMode === 'auto-landing' ? activeLandingCell! : waypoints[0];
+    const lastStopCell = waypoints[waypoints.length - 1];
+    if (legs.length === 1) {
+      // Single outbound leg: by symmetric undirected costs, shortest return is exact reverse
+      legs.push({ distance_m: legs[0].distance_m, time_s: legs[0].time_s, isReturn: true });
+      for (let k = full.length - 2; k >= 0; k--) full.push(full[k]);
+    } else if (lastStopCell === originCell) {
+      legs.push({ distance_m: 0, time_s: 0, isReturn: true });
+    } else {
+      const retPath = findPath(lastStopCell, originCell);
+      if (!retPath) return { ok: false, reason: 'no-route', legIndex: legs.length, isReturnLeg: true };
+      const retLeg = measure(retPath);
+      legs.push({ distance_m: retLeg.distance_m, time_s: retLeg.time_s, isReturn: true });
+      for (let k = 1; k < retPath.length; k++) full.push(retPath[k]);
+    }
+  }
+
+  const distance_m = legs.reduce((sum, l) => sum + l.distance_m, 0);
+  const travelTime_s = legs.reduce((sum, l) => sum + l.time_s, 0);
+  const appliedStopTime = legs.length > 0 ? stopTime_s : 0;
+  return {
+    ok: true,
+    effectiveMode,
+    landingCandidates,
+    activeLandingCell,
+    marginalLanding,
+    full,
+    stopCountsInFull,
+    legs,
+    distance_m,
+    travelTime_s,
+    stopTime_s: appliedStopTime,
+    time_s: travelTime_s + appliedStopTime,
+  };
+}
+
 let latestRouteId = 0;
 
 async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
   if ((!slopeU8 && !slopeF32) || !hazard) return;
   if (msg.id !== latestRouteId) return;
-  prepareSpeeds(msg.traverser);
+
+  const roundTrip = msg.roundTrip === true;
+  const stopWorkS = msg.stopWorkS ?? 0;
+  const allowNoData = msg.allowNoData === true;
 
   try {
-    for (let w = 0; w < msg.waypoints.length; w++) {
-      const why = blockReason(msg.waypoints[w]);
-      if (why) {
-        post({ type: 'route-result', id: msg.id, ok: false, reason: 'blocked-waypoint', waypointIndex: w, why });
-        return;
-      }
-    }
-
     const willComputeLeg =
       (msg.mode === 'auto-landing' && landing !== null && msg.waypoints.length > 0) || msg.waypoints.length > 1;
-    // Start lazy download of yukseklik.bin concurrently with pathfinding on the first real route request.
     const elevPromise = willComputeLeg ? ensureElevationLoaded() : null;
 
-    let landingCandidates: LandingCandidate[] = [];
-    let activeLandingCell: number | null = null;
-    let marginalLanding = false;
-    const full: number[] = [];
-    const legs: RouteLeg[] = [];
+    const planned = planMission(
+      msg.mode,
+      msg.waypoints,
+      msg.chosenLandingCell,
+      msg.minSeparationM,
+      msg.maxLandingTimeS,
+      roundTrip,
+      stopWorkS,
+      allowNoData,
+      msg.traverser,
+    );
 
-    if (msg.mode === 'auto-landing' && landing && msg.waypoints.length > 0) {
-      const rawLimit = msg.maxLandingTimeS !== undefined ? msg.maxLandingTimeS : msg.traverser.maxTimeS;
-      const maxTimeS = typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : Infinity;
-      const found = suggestLandingSites(msg.waypoints[0], maxTimeS, msg.minSeparationM);
-      if (!found) {
-        elevPromise?.catch(() => {});
-        post({
-          type: 'route-result',
-          id: msg.id,
-          ok: false,
-          reason: 'no-landing',
-          withinRangeChecked: Number.isFinite(maxTimeS),
-        });
-        return;
-      }
-
-      marginalLanding = found.marginal;
-      landingCandidates = found.candidates.map(({ cell, tier, distance_m, time_s }) => ({ cell, tier, distance_m, time_s }));
-
-      const picked =
-        (msg.chosenLandingCell != null ? found.candidates.find((c) => c.cell === msg.chosenLandingCell) : undefined) ??
-        found.candidates[0];
-      activeLandingCell = picked.cell;
-
-      full.push(...picked.pathToTarget);
-      legs.push({ distance_m: picked.distance_m, time_s: picked.time_s });
-
-      for (let leg = 0; leg + 1 < msg.waypoints.length; leg++) {
-        const path = findPath(msg.waypoints[leg], msg.waypoints[leg + 1]);
-        if (!path) {
-          elevPromise?.catch(() => {});
-          post({ type: 'route-result', id: msg.id, ok: false, reason: 'no-route', legIndex: leg + 1 });
-          return;
-        }
-        legs.push(measure(path));
-        for (let k = 1; k < path.length; k++) full.push(path[k]);
-      }
-    } else {
-      if (msg.waypoints.length > 0) full.push(msg.waypoints[0]);
-      for (let leg = 0; leg + 1 < msg.waypoints.length; leg++) {
-        const path = findPath(msg.waypoints[leg], msg.waypoints[leg + 1]);
-        if (!path) {
-          elevPromise?.catch(() => {});
-          post({ type: 'route-result', id: msg.id, ok: false, reason: 'no-route', legIndex: leg });
-          return;
-        }
-        legs.push(measure(path));
-        for (let k = 1; k < path.length; k++) full.push(path[k]);
-      }
+    if (!planned.ok) {
+      elevPromise?.catch(() => {});
+      post({ type: 'route-result', id: msg.id, ...planned });
+      return;
     }
 
     if (elevPromise) await elevPromise;
     if (msg.id !== latestRouteId) return;
 
+    // Re-ensure speed LUT matches msg.traverser & allowNoData when computing step times for turn-around
+    prepareSpeeds(msg.traverser, allowNoData);
+
+    const { full, stopCountsInFull } = planned;
     let noDataCells = 0;
     let cautionCells = 0;
     for (const cell of full) {
@@ -802,16 +989,46 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
     const path = Int32Array.from(full);
     const profileDist = new Float32Array(full.length);
     const profileSlope = new Float32Array(full.length);
-    const profileElev = hasElevation && legs.length > 0 ? new Float32Array(full.length) : null;
+    const profileElev = hasElevation && planned.legs.length > 0 ? new Float32Array(full.length) : null;
     const diagonal = cellM * Math.SQRT2;
+
+    const maxTimeS =
+      typeof msg.traverser.maxTimeS === 'number' && Number.isFinite(msg.traverser.maxTimeS) && msg.traverser.maxTimeS > 0
+        ? msg.traverser.maxTimeS
+        : null;
+    const perStopS = Math.max(0, Number.isFinite(stopWorkS) ? stopWorkS : 0);
+
     let along = 0;
+    let cumTime = 0;
+    let noDataM = 0;
+    let cautionM = 0;
+    let lastWithinCell = full.length > 0 ? full[0] : null;
+    let lastWithinDist = 0;
+
     for (let k = 0; k < full.length; k++) {
       const cell = full[k];
       if (k > 0) {
         const prev = full[k - 1];
-        const isDiagonal = prev % width !== cell % width && Math.floor(prev / width) !== Math.floor(cell / width);
-        along += isDiagonal ? diagonal : cellM;
+        const isDiag = prev % width !== cell % width && Math.floor(prev / width) !== Math.floor(cell / width);
+        const step = isDiag ? diagonal : cellM;
+        along += step;
+        cumTime += step / Math.min(cellSpeedAt(prev), cellSpeedAt(cell));
+
+        const ndWeight = (isNoData(prev) ? 0.5 : 0) + (isNoData(cell) ? 0.5 : 0);
+        const cWeight = (hazard[prev] === HAZARD_CAUTION ? 0.5 : 0) + (hazard[cell] === HAZARD_CAUTION ? 0.5 : 0);
+        noDataM += step * ndWeight;
+        cautionM += step * cWeight;
       }
+
+      if (maxTimeS !== null && cumTime <= maxTimeS) {
+        lastWithinCell = cell;
+        lastWithinDist = along;
+      }
+      const stopsHere = stopCountsInFull.get(k);
+      if (stopsHere) {
+        cumTime += stopsHere * perStopS;
+      }
+
       profileDist[k] = along;
       profileSlope[k] = isNoData(cell) ? NaN : slopeDegAt(cell);
       if (profileElev) {
@@ -819,21 +1036,30 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
       }
     }
 
+    const exceededLimit = maxTimeS !== null && planned.legs.length > 0 && planned.time_s > maxTimeS;
+
     post(
       {
         type: 'route-result',
         id: msg.id,
         ok: true,
-        mode: msg.mode === 'auto-landing' && landing ? 'auto-landing' : 'manual',
-        landingCandidates,
-        activeLandingCell,
-        marginalLanding,
+        mode: planned.effectiveMode,
+        roundTrip,
+        landingCandidates: planned.landingCandidates,
+        activeLandingCell: planned.activeLandingCell,
+        marginalLanding: planned.marginalLanding,
         path,
-        legs,
-        distance_m: legs.reduce((sum, l) => sum + l.distance_m, 0),
-        time_s: legs.reduce((sum, l) => sum + l.time_s, 0),
+        legs: planned.legs,
+        distance_m: planned.distance_m,
+        time_s: planned.time_s,
+        travelTime_s: planned.travelTime_s,
+        stopTime_s: planned.stopTime_s,
         noDataCells,
         cautionCells,
+        noDataM,
+        cautionM,
+        turnAroundCell: exceededLimit ? lastWithinCell : null,
+        turnAroundDist_m: exceededLimit ? lastWithinDist : null,
         profileDist,
         profileSlope,
         profileElev,
@@ -845,15 +1071,105 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
   }
 }
 
+function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
+  if ((!slopeU8 && !slopeF32) || !hazard) return;
+  try {
+    const rows: TraverserComparisonRow[] = msg.entries.map((entry) => {
+      const res = planMission(
+        msg.mode,
+        msg.waypoints,
+        null,
+        msg.minSeparationM,
+        undefined,
+        msg.roundTrip,
+        msg.stopWorkS,
+        msg.allowNoData,
+        entry.traverser,
+      );
+      if (!res.ok) {
+        let failReason = 'Unreachable';
+        if (res.reason === 'blocked-waypoint') {
+          failReason =
+            res.why === 'forbidden'
+              ? 'Stop in forbidden zone'
+              : res.why === 'no-data'
+              ? 'Stop in no-data zone'
+              : `Stop > ${entry.traverser.maxSlopeDeg}°`;
+        } else if (res.reason === 'no-landing') {
+          failReason = res.withinRangeChecked ? 'No landing within max duration' : 'No reachable landing site';
+        } else {
+          failReason = `Blocked (> ${entry.traverser.maxSlopeDeg}° or forbidden)`;
+        }
+        return { id: entry.id, name: entry.name, ok: false, failReason };
+      }
+
+      let maxSlope = 0;
+      for (const cell of res.full) {
+        if (!isNoData(cell)) {
+          const s = slopeDegAt(cell);
+          if (s > maxSlope) maxSlope = s;
+        }
+      }
+      const withinLimit =
+        entry.traverser.maxTimeS === null || !Number.isFinite(entry.traverser.maxTimeS)
+          ? true
+          : res.time_s <= entry.traverser.maxTimeS;
+
+      return {
+        id: entry.id,
+        name: entry.name,
+        ok: true,
+        distance_m: res.distance_m,
+        time_s: res.time_s,
+        travelTime_s: res.travelTime_s,
+        stopTime_s: res.stopTime_s,
+        maxSlope_deg: maxSlope,
+        withinLimit,
+        marginalLanding: res.marginalLanding,
+      };
+    });
+    post({ type: 'compare-result', id: msg.id, rows });
+  } finally {
+    trimWindowBuffers();
+  }
+}
+
+function probeCell(cell: number): void {
+  if ((!slopeU8 && !slopeF32) || !hazard) return;
+  if (!Number.isInteger(cell) || cell < 0 || cell >= width * height) return;
+  const slopeDeg = isSlopeNoData(cell) ? null : slopeDegAt(cell);
+  const maxValidByte = slopeNoData === 255 ? 254 : 255;
+  const slopeAtOrAboveMaxByte = slopeU8 !== null && slopeU8[cell] === maxValidByte;
+  const hazardClass = hazard[cell];
+  const landingClass = landing ? landing[cell] : null;
+  const hasElev = elevI16 !== null || elevF32 !== null;
+  const z = hasElev ? elevMetresAt(cell) : NaN;
+  post({
+    type: 'probe-result',
+    cell,
+    slopeDeg,
+    slopeAtOrAboveMaxByte,
+    hazardClass,
+    landingClass,
+    elevM: Number.isNaN(z) ? null : z,
+    elevLoaded,
+  });
+}
+
 let taskChain: Promise<void> = Promise.resolve();
 
 ctx.onmessage = (event: MessageEvent<ToWorker>) => {
   const msg = event.data;
+  if (msg.type === 'probe') {
+    probeCell(msg.cell);
+    return;
+  }
   if (msg.type === 'route') latestRouteId = msg.id;
   taskChain = taskChain.then(async () => {
     try {
       if (msg.type === 'init') await init(msg);
-      else await route(msg);
+      else if (msg.type === 'route') await route(msg);
+      else if (msg.type === 'compare') compareTraversers(msg);
     } catch (err: unknown) {
       post({ type: 'init-error', message: err instanceof Error ? err.message : String(err) });
     }
