@@ -81,9 +81,14 @@ export function initTraverserSelector(
   group.setAttribute('aria-label', 'Traverser type');
   const noteEl = el('p', 'traverser-note');
   const details = el('details', 'traverser-details');
-  const summary = el('summary', undefined, 'Parameters, sources & confidence');
+  const summary = el('summary', undefined, 'How mobility limits were chosen (parameters & sources)');
+  const methodNote = el(
+    'p',
+    'route-note',
+    'Every limit, speed table and max duration is read from mobilite_parametreleri.json with its stated source and confidence tag. Speed depends on slope magnitude only; uphill and downhill are treated the same.',
+  );
   const list = el('dl', 'facts');
-  details.append(summary, list);
+  details.append(summary, methodNote, list);
 
   const showParameters = (t: Traverser): void => {
     noteEl.textContent = t.aciklama_en ?? '';

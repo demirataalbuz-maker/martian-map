@@ -325,8 +325,8 @@ export function renderResults(
     ? 'Time includes one-way travel and work time at science stops (no return leg).'
     : 'Time is one-way travel only (no time at stops, no return).';
   const baselineNote = hasBaseline
-    ? `Terrain slope is ceiling-quantized over a ${slopeBaselineM} m baseline (not directional slope).`
-    : 'Slope is the terrain slope of each cell, not the slope along the direction of travel.';
+    ? `Terrain slope is ceiling-quantized over a ${slopeBaselineM} m baseline. Speed depends on slope magnitude only; uphill and downhill are treated the same.`
+    : 'Speed depends on slope magnitude only; uphill and downhill are treated the same.';
   root.append(el('p', 'route-note', `${timeBasis} ${baselineNote} Grey spans in the charts have no data.`));
 }
 

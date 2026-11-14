@@ -94,6 +94,6 @@ The route is the least-**time** path on the cost grid (A*, 8-connected, in a Web
 Worker). All numbers come from the data files:
 
 - step length = `hucre_m` (orthogonal) or `hucre_m` × √2 (diagonal); step time = length / speed
-- cell speed = the traverser's speed table interpolated at the cell's slope
+- cell speed = the traverser's speed table interpolated at the cell's slope (speed depends on slope magnitude only; uphill and downhill are treated the same)
 - impassable = hazard class 2 (forbidden) or slope above the traverser's limit; diagonal steps never cut a blocked corner
 - "caution" cells are passable at the slowest speed in the traverser's table and trigger a route warning; unmapped ("no data", 255) cells are **not crossed by default** (distinct from "forbidden" 2, with a dedicated message) and can optionally be allowed at slowest speed with a warning via the UI toggle
