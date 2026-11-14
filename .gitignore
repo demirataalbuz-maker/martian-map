@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# Raw mission data never goes into the repository (only processed layers under public/veri).
+ham-veri/
+raw-data/

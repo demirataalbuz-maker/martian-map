@@ -1,0 +1,26 @@
+<!doctype html>
+<!-- AI-assisted code: written with Claude (Anthropic), reviewed by the team. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marswalk Map</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Marswalk Map</h1>
+      <span id="site-name" class="site"></span>
+      <span id="synthetic-badge" class="badge" hidden>SYNTHETIC DATA — not real Mars data</span>
+    </header>
+    <main class="stage">
+      <div id="map" aria-label="Layered map of the traverse area"></div>
+      <div id="scalebar" class="scalebar" aria-live="off">
+        <div class="scalebar-line"></div>
+        <span class="scalebar-label"></span>
+      </div>
+      <aside id="layer-card" class="card" hidden></aside>
+      <div id="status" class="status" role="status"></div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "martian-map",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Layered local-scale Marswalk map with obstacle-avoiding route planning (NASA Space Apps Challenge 2026).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "fake-data": "node scripts/make-fake-data.mjs"
+  },
+  "dependencies": {
+    "maplibre-gl": "^6.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
