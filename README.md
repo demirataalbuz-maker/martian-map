@@ -6,7 +6,9 @@ obstacle-avoiding route planning between science stops.
 Built for the NASA Space Apps Challenge 2026, challenge *Interplanetary Survival
 Guide: Martian Map*. Static single-page web app, no backend.
 
-> **Status:** step 6 of 7 — everything except deployment: layers, routing, results, science stops, GeoJSON export
+> **Live site:** https://demirataalbuz-maker.github.io/martian-map/ (no login needed)
+>
+> **Status:** all planned features are in place and deployed.
 > (start + science stops, visited in tap order). The data in `public/veri` is **synthetic** and is
 > labelled as such in the UI.
 
