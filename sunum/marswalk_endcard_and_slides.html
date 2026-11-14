@@ -1,12 +1,12 @@
 <!doctype html>
 <!-- AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team. -->
 <!-- Pure HTML/CSS/SVG presentation & 27-30s video end card (zero AI-generated imagery, zero NASA/USGS logos). -->
-<!-- NOTE: Update the end-card credit line (#endcard-data-credit) and Slide 4 table to exact shipped products once real data is locked. -->
+<!-- DRAFT NOTE: Update #endcard-data-credit, Slide 4 (Data & Sources), and Slide 7 (AI tools) once final GIS products & Çağatay's tool list are locked. -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Marswalk Map — Video End Card &amp; 7-Slide Deck</title>
+    <title>Marswalk Map — Video End Card &amp; 7-Slide Deck (Draft)</title>
     <style>
       :root {
         --bg: #14100e;
@@ -191,12 +191,12 @@
         width: 100%;
         border-collapse: collapse;
         margin: auto 0;
-        font-size: 0.82rem;
+        font-size: 0.79rem;
       }
 
       table.data-table th,
       table.data-table td {
-        padding: 10px 10px;
+        padding: 8px 9px;
         border-bottom: 1px solid var(--line);
         text-align: left;
         vertical-align: top;
@@ -204,7 +204,7 @@
 
       table.data-table th {
         color: var(--accent);
-        font-size: 0.76rem;
+        font-size: 0.74rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
@@ -333,11 +333,11 @@
           <div class="slide-tag">NASA Space Apps Challenge 2026 · Interplanetary Survival Guide: Martian Map</div>
           <h1>Marswalk Map</h1>
           <p class="lead" style="margin: 0 auto">
-            Target-First Safe Landing &amp; Surface Traverse Planner for Mars Missions
+            Target-First Candidate Landing &amp; Surface Traverse Planner for Mars Missions
           </p>
           <div class="url-box">demirataalbuz-maker.github.io/martian-map</div>
           <p id="endcard-data-credit" class="credit-line">
-            Built on open planetary archives: NASA PDS · JPL-Caltech · USGS Astrogeology · Arizona State University<br />
+            Built on open planetary data: NASA PDS · JPL-Caltech · USGS Astrogeology · Caltech Murray Lab · ASU (draft credit)<br />
             Open-Source (Apache-2.0) · Static Web App · No Login Required
           </p>
         </div>
@@ -349,7 +349,7 @@
           <span class="slide-tag">Slide 1 / 7 · Title &amp; Core Shift</span>
           <h1>Marswalk Map</h1>
           <p class="lead">
-            Target-first landing site recommendation and obstacle-avoiding EVA route planner over a 20 m Mars terrain grid.
+            Target-first candidate landing site suggestion and obstacle-avoiding EVA route planner over a 20 m Mars terrain grid in the Jezero crater region.
           </p>
         </div>
         <div class="grid-3">
@@ -358,8 +358,8 @@
             <p>Instead of guessing an arbitrary start pin, planners select the geological stop they want to investigate.</p>
           </div>
           <div class="card">
-            <h3>2. Recommend Safe Landing</h3>
-            <p>Reverse Dijkstra finds the closest safe landing zone (<span class="pill ok">L</span>) plus separated backups (<span class="pill warn">B1 / B2</span>).</p>
+            <h3>2. Suggest Candidate Landing</h3>
+            <p>Reverse Dijkstra suggests the closest suitable candidate landing site (<span class="pill ok">L</span>) plus separated backups (<span class="pill warn">B1 / B2</span>).</p>
           </div>
           <div class="card">
             <h3>3. Plan &amp; Verify the EVA</h3>
@@ -382,15 +382,15 @@
           <div class="card">
             <h3>Lander Footprint Geometry</h3>
             <ul>
-              <li>A lander requires an entire hazard-free circle (<code>guvenli_alan_capi_m</code>), not just one flat pixel.</li>
-              <li>Primary and backup landing sites must be spatially separated so a single local scarp or boulder field cannot invalidate all options.</li>
+              <li>A lander requires an entire suitable circular footprint (<code>guvenli_alan_capi_m</code>) meeting slope and elevation limits, not just one flat pixel.</li>
+              <li>Primary and backup candidate landing sites must be spatially separated so one local scarp or hazard cannot invalidate all options.</li>
             </ul>
           </div>
           <div class="card">
             <h3>Vehicle-Specific Mobility</h3>
             <ul>
               <li>Suited astronauts, crewed rovers, and robotic rovers obey distinct slope limits, obstacle clearances, and speed-vs-slope curves.</li>
-              <li>Steep scarps and boulder fields require automatic corridor detours.</li>
+              <li>Steep scarps and mapped hazards require automatic corridor detours.</li>
             </ul>
           </div>
           <div class="card">
@@ -417,7 +417,7 @@
           <div class="card">
             <h3>Mission Capabilities</h3>
             <ul>
-              <li><strong>Auto-Landing + Backups:</strong> Prioritizes class-0 suitable zones within range; falls back to class-1 marginal sites only with an explicit warning.</li>
+              <li><strong>Candidate Landing + Backups:</strong> Prioritizes class-0 suitable candidates within range; falls back to class-1 marginal candidates only with an explicit warning.</li>
               <li><strong>True Round-Trip Check:</strong> Computes the actual A* return path from the last stop to landing/start and places a <code>!</code> turn-around marker where budget runs out.</li>
               <li><strong>Resilient UX:</strong> Clicking an unreachable target preserves the active route and reports why even when the side panel is collapsed.</li>
             </ul>
@@ -440,47 +440,53 @@
       <!-- ==================== SLIDE 4 / 7 ==================== -->
       <section class="slide">
         <div>
-          <span class="slide-tag">Slide 4 / 7 · Data &amp; Sources</span>
-          <h2>Planetary Datasets, Citations &amp; Open Licenses (Jezero–Northeast)</h2>
+          <span class="slide-tag">Slide 4 / 7 · Data &amp; Sources (DRAFT — Lock on Final GIS Export)</span>
+          <h2>Planetary Datasets &amp; Open Licenses — Jezero Crater Region</h2>
         </div>
         <table class="data-table">
           <thead>
             <tr>
-              <th>Dataset &amp; Scale</th>
+              <th>Dataset &amp; Scale (DRAFT)</th>
               <th>Role in Pipeline</th>
-              <th>Citation / Provenance</th>
+              <th>Citation / Provenance (DRAFT — Lock Exact IDs)</th>
               <th>License</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>USGS MRO CTX DEM (20 m) &amp; Mosaic (~5 m)</strong></td>
-              <td><code>86.1 × 107.5 km</code> (<code>4300 × 5375</code>) elevation, ceiling-quantized 20 m slope, regional tiles (<code>z8–z14</code>).</td>
-              <td>Fergason et al. (2020), <em>Mars 2020 TRN CTX DTM &amp; Orthoimage Mosaics</em>, USGS Astrogeology. DOI: <code>10.5066/P906QQT8</code>.</td>
+              <td><strong>MRO CTX Global Mosaic (~5 m/px)</strong></td>
+              <td>Regional visual basemap tile pyramid (capped at <code>z14</code>) over the <code>86.1 × 107.5 km</code> box.</td>
+              <td>Dickson et al. (2023/2024), <em>Mars MRO CTX Global Mosaic, Murray Lab v1</em>, Caltech Bruce Murray Lab / NASA PDS (<code>10.17189/m23v-ae12</code>).</td>
+              <td>Open PDS / CC BY (confirm notice)</td>
+            </tr>
+            <tr>
+              <td><strong>USGS MRO CTX DEM (20 m/px)</strong></td>
+              <td><code>4300 × 5375</code> elevation (<code>yukseklik.bin</code>), ceiling-quantized 20 m slope (<code>egim.bin</code>), and terrain inputs to <code>tehlike.bin</code> / <code>inis.bin</code>.</td>
+              <td><strong>[TBD on GIS lock]</strong> — USGS Astrogeology CTX DTM product(s) or Mars 2020 TRN CTX DTM Mosaic.</td>
               <td>U.S. Public Domain (<code>CC0 1.0</code>)</td>
             </tr>
             <tr>
-              <td><strong>MRO HiRISE DTM (1 m) &amp; Orthoimage (0.25 m)</strong></td>
-              <td>Meter-scale boulder/scarp hazard &amp; landing validation and core-area detail tiles (<code>z15–z16</code>).</td>
-              <td>Fergason et al. (2020), USGS DOIs <code>10.5066/P9REJ9JN</code> &amp; <code>10.5066/P9QJDP48</code>; MRO HiRISE (McEwen et al., Univ. of Arizona).</td>
+              <td><strong>MRO HiRISE DTM (~1 m) / Imagery</strong></td>
+              <td><strong>[DRAFT — confirm shipped role]</strong> Local high-resolution reference in core Jezero area (basemap tiles remain <code>≤ z14</code>).</td>
+              <td><strong>[TBD on GIS lock]</strong> — USGS Astrogeology / MRO HiRISE (NASA/JPL-Caltech/Univ. of Arizona, McEwen et al., 2007).</td>
               <td>U.S. Public Domain (<code>CC0 1.0</code>)</td>
             </tr>
             <tr>
-              <td><strong>Mars Odyssey THEMIS Thermal Inertia (~100 m)</strong></td>
-              <td>Thermophysical dust/sand vs. bedrock surface hazard &amp; landing screening.</td>
-              <td>Christensen et al. (2004); Fergason et al. (2006, <code>10.1029/2006JE002735</code>), ASU Mars Space Flight Facility &amp; NASA PDS.</td>
-              <td>NASA PDS Open Archive (Public Domain)</td>
+              <td><strong>Mars Odyssey THEMIS Day/Night IR (~100 m/px)</strong></td>
+              <td>Regional daytime/nighttime infrared mosaic layer.</td>
+              <td><strong>[TBD on GIS lock]</strong> — 2001 Mars Odyssey THEMIS Daytime/Nighttime IR Mosaic (USGS SIM 3464; ASU Mars Space Flight Facility &amp; USGS Astrogeology).</td>
+              <td>U.S. Public Domain (USGS / PDS)</td>
             </tr>
             <tr>
               <td><strong>Mars 2020 Perseverance Traverse</strong></td>
-              <td>Ground-truth reference science stops (<code>duraklar.json</code>) and surface context in Jezero Crater.</td>
-              <td>Deen, R. G. (Ed.) (2022–2026), <em>Mars 2020 Rover PLACES Bundle</em>, NASA/JPL-Caltech PDS Geosciences. DOI: <code>10.17189/btz6-5a82</code>.</td>
+              <td>Reference science stops (<code>duraklar.json</code>) and rover traverse context in Jezero crater.</td>
+              <td>Deen, R. G. (Ed.) (2022–2026), <em>Mars 2020 Rover PLACES Bundle</em>, NASA/JPL-Caltech PDS Geosciences (<code>10.17189/btz6-5a82</code>).</td>
               <td>U.S. Public Domain (NASA Open Data)</td>
             </tr>
           </tbody>
         </table>
         <div class="slide-foot">
-          <span>Study Box: 76.667–78.198° E, 17.586–19.400° N (~23.1M cells at 20 m)</span>
+          <span>Jezero Crater Region Box: 76.667–78.198° E, 17.586–19.400° N (~23.1M cells at 20 m)</span>
           <span>4 / 7</span>
         </div>
       </section>
@@ -495,7 +501,7 @@
           <div class="card">
             <h3>Mars Grid Geometry</h3>
             <ul>
-              <li>Zero Earth basemap tiles or Earth-radius formulas.</li>
+              <li>Zero Earth basemap tiles or Earth-radius formulas (basemap tiles up to <code>z14</code>).</li>
               <li>All distances, times, warning spans, and the custom scale bar come from <code>hucre_m</code> (diagonal <code>× √2</code>).</li>
             </ul>
           </div>
@@ -532,7 +538,7 @@
             <ul>
               <li><strong>Live 20 m Mars HUD:</strong> Instant cursor/tap readout of Mars coordinates, ceiling-quantized slope (with <code>≥</code> saturation flag), hazard class, landing class, and elevation.</li>
               <li><strong>Plain-SVG Profiles:</strong> Dependency-free Elevation and Slope charts marking stops, NoData gaps, slope limits, and max-time turn-around.</li>
-              <li><strong>Mars GeoJSON Export:</strong> Downloads landing candidates, stops, leg metrics, and route line with explicit non-WGS84 Mars CRS metadata.</li>
+              <li><strong>Mars GeoJSON Export:</strong> Downloads candidate landing sites, stops, leg metrics, and route line with explicit non-WGS84 Mars CRS metadata.</li>
             </ul>
           </div>
           <div class="card">
@@ -560,14 +566,14 @@
             <h3>Documented Physical Limitations</h3>
             <ul>
               <li><strong>Undirected Slope Speed:</strong> <em>Speed depends on slope magnitude only; uphill and downhill are treated the same.</em> Directional grade energetics and illumination/thermal shadow routing are next steps.</li>
-              <li><strong>Baseline Quantization:</strong> Slopes are ceiling-quantized over <code>egim_taban_uzunlugu_m</code> so steepness is never underestimated; meter-scale boulders rely on the hazard/HiRISE layer.</li>
+              <li><strong>20 m Grid &amp; No Rock Layer:</strong> Slopes are ceiling-quantized over <code>egim_taban_uzunlugu_m</code>; meter-scale rock abundance is not modeled in the 20 m grid, so candidate landing sites require human verification on high-resolution imagery.</li>
             </ul>
           </div>
           <div class="card">
             <h3>Open Source &amp; AI Disclosure</h3>
             <ul>
               <li><strong>License:</strong> Apache-2.0 (<code>github.com/demirataalbuz-maker/martian-map</code>). Shipped runtime library: MapLibre GL JS 6.18 (<code>BSD-3-Clause</code>).</li>
-              <li><strong>Use of AI:</strong> Code and tests were developed with Claude (Anthropic) and Antigravity (Google DeepMind) and verified by the team (attributed in every source header). Zero AI-generated imagery is used as planetary data.</li>
+              <li><strong>Use of AI (DRAFT):</strong> Code, tests, and presentation drafts used Claude (Anthropic) and Antigravity (Google DeepMind) <em>[+ add Çağatay's AI tools once confirmed]</em>, reviewed by the team. Zero AI-generated imagery is used as Mars data.</li>
             </ul>
           </div>
         </div>
