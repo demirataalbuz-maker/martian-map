@@ -57,6 +57,8 @@ interface ChartSpec {
   stops: number[];
   /** Optional distance along the route where max mission duration is exceeded. */
   turnAroundX?: number | null;
+  /** Optional distance along the route where Apollo walk-back survival limit is exceeded. */
+  walkBackX?: number | null;
   /** [from, to] distance spans with no data. */
   gaps: [number, number][];
   includeZero?: boolean;
@@ -118,13 +120,24 @@ function drawChart(spec: ChartSpec): SVGSVGElement {
   for (const stop of spec.stops) {
     root.append(svg('line', { x1: px(stop), x2: px(stop), y1: M.top, y2: M.top + plotH, class: 'chart-stop' }));
   }
+  const hasWalkBackLine = typeof spec.walkBackX === 'number' && Number.isFinite(spec.walkBackX);
+  if (hasWalkBackLine) {
+    const wx = px(spec.walkBackX!);
+    root.append(svg('line', { x1: wx, x2: wx, y1: M.top, y2: M.top + plotH, class: 'chart-turnaround' }));
+    const anchor = wx > M.left + plotW * 0.72 ? 'end' : 'start';
+    const dx = anchor === 'end' ? -3 : 3;
+    root.append(
+      svg('text', { x: wx + dx, y: M.top + 9, class: 'chart-turnaround-label', 'text-anchor': anchor }, 'walk-back'),
+    );
+  }
   if (typeof spec.turnAroundX === 'number' && Number.isFinite(spec.turnAroundX)) {
     const tx = px(spec.turnAroundX);
     root.append(svg('line', { x1: tx, x2: tx, y1: M.top, y2: M.top + plotH, class: 'chart-turnaround' }));
     const anchor = tx > M.left + plotW * 0.75 ? 'end' : 'start';
     const dx = anchor === 'end' ? -3 : 3;
+    const labelY = hasWalkBackLine && Math.abs(tx - px(spec.walkBackX!)) < 55 ? M.top + 19 : M.top + 9;
     root.append(
-      svg('text', { x: tx + dx, y: M.top + 9, class: 'chart-turnaround-label', 'text-anchor': anchor }, 'max t'),
+      svg('text', { x: tx + dx, y: labelY, class: 'chart-turnaround-label', 'text-anchor': anchor }, 'max t'),
     );
   }
   for (const ref of spec.refs ?? []) {
@@ -219,6 +232,19 @@ export function renderResults(
     ],
   ];
   if (elev) rows.push(['Climb / descent', `+${Math.round(ascent)} m / −${Math.round(descent)} m`]);
+  if (result.walkBackLimit_s !== null) {
+    const wbLimitH = Number((result.walkBackLimit_s / 3600).toFixed(2));
+    if (!result.walkBackExceeded && result.maxWalkBackTotal_s !== null && Number.isFinite(result.maxWalkBackTotal_s)) {
+      rows.push(['Walk-back check', `Peak ${formatDuration(result.maxWalkBackTotal_s)} ≤ ${wbLimitH} h suit limit (OK)`]);
+    } else if (result.maxWalkBackTotal_s !== null && Number.isFinite(result.maxWalkBackTotal_s)) {
+      rows.push([
+        'Walk-back check',
+        `Peak ${formatDuration(result.maxWalkBackTotal_s)} > ${wbLimitH} h suit limit (exceeded at ~${Math.round(result.walkBackDist_m ?? 0)} m)`,
+      ]);
+    } else {
+      rows.push(['Walk-back check', `Exceeded beyond ~${Math.round(result.walkBackDist_m ?? 0)} m (> ${wbLimitH} h suit limit)`]);
+    }
+  }
   for (const [term, value] of rows) totals.append(el('dt', undefined, term), el('dd', undefined, value));
   root.append(totals);
 
@@ -245,6 +271,12 @@ export function renderResults(
   if (result.marginalLanding) {
     warnings.push(
       'No class-0 suitable landing zone was reachable within range; using a marginal (borderline, class 1) landing zone.',
+    );
+  }
+  if (result.walkBackExceeded && result.walkBackLimit_s !== null) {
+    const wbLimitH = Number((result.walkBackLimit_s / 3600).toFixed(2));
+    warnings.push(
+      `Walk-back survival limit (${wbLimitH} h) exceeded beyond ~${Math.round(result.walkBackDist_m ?? 0)} m (marked "!" on the map; dashed red segment): if the rover fails past this point, walking back to the ${originLabel.toLowerCase()} exceeds suit life support or is blocked by steeper terrain.`,
     );
   }
   if (hasLimit && result.time_s > limitHours * 3600) {
@@ -292,6 +324,7 @@ export function renderResults(
         total: result.distance_m,
         stops,
         turnAroundX: result.turnAroundDist_m,
+        walkBackX: result.walkBackExceeded ? result.walkBackDist_m : null,
         gaps: elevGaps,
       }),
     );
@@ -310,6 +343,7 @@ export function renderResults(
       total: result.distance_m,
       stops,
       turnAroundX: result.turnAroundDist_m,
+      walkBackX: result.walkBackExceeded ? result.walkBackDist_m : null,
       gaps: slopeGaps,
       refs,
       includeZero: true,
@@ -364,6 +398,8 @@ export function renderComparison(
       tr.append(el('td', undefined, `${(row.maxSlope_deg ?? 0).toFixed(1)}°`));
       if (row.withinLimit === false) {
         tr.append(el('td', 'compare-status-warn', 'Exceeds max time'));
+      } else if (row.walkBackExceeded) {
+        tr.append(el('td', 'compare-status-warn', 'Exceeds walk-back'));
       } else if (row.marginalLanding) {
         tr.append(el('td', 'compare-status-warn', 'Marginal landing'));
       } else {

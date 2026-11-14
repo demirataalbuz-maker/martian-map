@@ -31,6 +31,8 @@ export interface LayerDef {
   max_zoom?: number;
   sinir?: TileBounds;
   karo_boyutu?: number;
+  varsayilan_acik?: boolean;
+  varsayilan_saydamlik?: number;
   kaynak: string;
   cozunurluk_m: number;
   guven_notu_en: string;
@@ -54,10 +56,13 @@ export interface GridMeta {
   egim_olcek: number;
   egim_veri_yok: number;
   egim_taban_uzunlugu_m?: number;
+  egim_yontemi_en?: string;
   yukseklik_tipi: ElevationEncoding;
   yukseklik_taban_m: number;
   yukseklik_olcek_m: number;
   yukseklik_veri_yok: number;
+  kaynak_en?: string;
+  guven_notu_en?: string;
 }
 
 const MAX_MERCATOR_LAT = 85.051129;
@@ -137,7 +142,7 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
   if (!obj || !Array.isArray(obj.katmanlar) || obj.katmanlar.length === 0) {
     throw new Error('katmanlar.json contains no layers');
   }
-  const seenIds = new Set<string>(['background', 'route-casing', 'route-line']);
+  const seenIds = new Set<string>(['background', 'route-casing', 'route-line', 'route-unsafe']);
   const layers = (obj.katmanlar as unknown[]).map((item, idx): LayerDef => {
     if (!isRecord(item)) throw new Error(`katmanlar.json: layer #${idx} is not an object`);
     const id = typeof item.id === 'string' ? item.id.trim() : '';
@@ -213,6 +218,15 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
           .filter((e): e is Record<string, unknown> => isRecord(e) && typeof e.renk === 'string' && typeof e.etiket_en === 'string')
           .map((e) => ({ renk: e.renk as string, etiket_en: e.etiket_en as string }))
       : [];
+
+    const acikRaw = item.varsayilan_acik ?? item.acik;
+    const varsayilan_acik = typeof acikRaw === 'boolean' ? acikRaw : undefined;
+    const saydamlikRaw = item.varsayilan_saydamlik ?? item.saydamlik;
+    let varsayilan_saydamlik: number | undefined;
+    if (typeof saydamlikRaw === 'number' && Number.isFinite(saydamlikRaw) && saydamlikRaw >= 0 && saydamlikRaw <= 100) {
+      varsayilan_saydamlik = saydamlikRaw > 1 ? saydamlikRaw / 100 : saydamlikRaw;
+    }
+
     return {
       id,
       ad_en: typeof item.ad_en === 'string' && item.ad_en ? item.ad_en : id,
@@ -225,6 +239,8 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
       max_zoom,
       sinir,
       karo_boyutu,
+      varsayilan_acik,
+      varsayilan_saydamlik,
       kaynak: typeof item.kaynak === 'string' ? item.kaynak : '',
       cozunurluk_m: typeof item.cozunurluk_m === 'number' ? item.cozunurluk_m : NaN,
       guven_notu_en: typeof item.guven_notu_en === 'string' ? item.guven_notu_en : '',
@@ -291,7 +307,12 @@ export async function loadGridMeta(): Promise<GridMeta> {
   const yukseklik_tipi: ElevationEncoding = elevTypeRaw;
 
   let yukseklik_taban_m = 0;
-  if (raw.yukseklik_taban_m !== undefined) {
+  if (yukseklik_tipi === 'int16') {
+    if (!(typeof raw.yukseklik_taban_m === 'number' && Number.isFinite(raw.yukseklik_taban_m))) {
+      throw new Error('izgara.json: "yukseklik_taban_m" must be a finite number when "yukseklik_tipi" is "int16"');
+    }
+    yukseklik_taban_m = raw.yukseklik_taban_m;
+  } else if (raw.yukseklik_taban_m !== undefined) {
     if (!(typeof raw.yukseklik_taban_m === 'number' && Number.isFinite(raw.yukseklik_taban_m))) {
       throw new Error('izgara.json: "yukseklik_taban_m" must be a finite number');
     }
@@ -299,7 +320,12 @@ export async function loadGridMeta(): Promise<GridMeta> {
   }
 
   let yukseklik_olcek_m = 1;
-  if (raw.yukseklik_olcek_m !== undefined) {
+  if (yukseklik_tipi === 'int16') {
+    if (!isPositive(raw.yukseklik_olcek_m)) {
+      throw new Error('izgara.json: "yukseklik_olcek_m" must be a positive number when "yukseklik_tipi" is "int16"');
+    }
+    yukseklik_olcek_m = raw.yukseklik_olcek_m;
+  } else if (raw.yukseklik_olcek_m !== undefined) {
     if (!isPositive(raw.yukseklik_olcek_m)) {
       throw new Error('izgara.json: "yukseklik_olcek_m" must be a positive number');
     }
@@ -320,7 +346,8 @@ export async function loadGridMeta(): Promise<GridMeta> {
     yukseklik_veri_yok = raw.yukseklik_veri_yok;
   }
 
-  const siteName = typeof raw.alan_en === 'string' && raw.alan_en.trim() ? raw.alan_en.trim() : undefined;
+  const optStr = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const siteName = optStr(raw.alan_en);
   return {
     synthetic: raw.sahte === true,
     siteName,
@@ -332,10 +359,13 @@ export async function loadGridMeta(): Promise<GridMeta> {
     egim_olcek,
     egim_veri_yok,
     egim_taban_uzunlugu_m,
+    egim_yontemi_en: optStr(raw.egim_yontemi_en),
     yukseklik_tipi,
     yukseklik_taban_m,
     yukseklik_olcek_m,
     yukseklik_veri_yok,
+    kaynak_en: optStr(raw.kaynak_en),
+    guven_notu_en: optStr(raw.guven_notu_en),
   };
 }
 
@@ -376,6 +406,10 @@ export interface Traverser {
   uyari_egim_derece?: number;
   azami_engel_m?: number;
   azami_sure_saat?: number;
+  /** Optional explicit suit life-support limit (hours) for walk-back survival checks. */
+  yasam_destek_saat?: number;
+  /** Optional explicit toggle for walk-back survival check (defaults to true for roverli_insan). */
+  yuruyus_donus?: boolean;
   enerji_katsayisi?: number;
   kaynaklar: Record<string, string>;
   guvenler: Record<string, ConfidenceLevel>;
@@ -516,10 +550,12 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
   const uyariRaw = readNum('uyari_egim_derece');
   const engelRaw = readNum('azami_engel_m', ['azami_kaya_m']);
   const sureRaw = readNum('azami_sure_saat');
+  const yasamRaw = readNum('yasam_destek_saat', ['yuruyus_sure_saat', 'walk_back_saat']);
   const enerjiRaw = readNum('enerji_katsayisi');
 
-  const hasAssumption = Object.values(guvenler).some((g) => g.toUpperCase() === 'VARSAYIM');
-  void hasAssumption;
+  const walkFlagField = raw.yuruyus_donus ?? raw.walk_back;
+  const walkFlagUnwrapped = walkFlagField !== undefined ? unwrapField(walkFlagField).value : undefined;
+  const yuruyus_donus = typeof walkFlagUnwrapped === 'boolean' ? walkFlagUnwrapped : undefined;
 
   return {
     id,
@@ -530,6 +566,8 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
     uyari_egim_derece: isPositive(uyariRaw) && uyariRaw < azami_egim_derece ? uyariRaw : undefined,
     azami_engel_m: isPositive(engelRaw) ? engelRaw : undefined,
     azami_sure_saat: isPositive(sureRaw) ? sureRaw : undefined,
+    yasam_destek_saat: isPositive(yasamRaw) ? yasamRaw : undefined,
+    yuruyus_donus,
     enerji_katsayisi: isPositive(enerjiRaw) ? enerjiRaw : undefined,
     kaynaklar,
     guvenler,
@@ -566,7 +604,7 @@ function parseLandingCraft(raw: unknown): LandingCraftParams | null {
 
 /**
  * Supports both:
- *   1) Dictionary schema (Çağatay's contract): { yuruyen_insan: {...}, roverli_insan: {...}, rover: {...}, inis_araci: {...} }
+ *   1) Dictionary schema (team mobility contract): { yuruyen_insan: {...}, roverli_insan: {...}, rover: {...}, inis_araci: {...} }
  *      with { deger, kaynak, guven } parameter objects, and
  *   2) Legacy list schema: { gezginler: [...] } or a bare [...] array.
  */

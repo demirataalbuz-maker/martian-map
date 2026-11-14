@@ -16,4 +16,4 @@ export const STOPS_URL = `${DATA_DIR}/duraklar.json`;
 export const MOBILITY_URL = `${base}mobilite_parametreleri.json`;
 
 // Fallback display name when neither katmanlar.json nor izgara.json specifies alan_en.
-export const SITE_NAME = 'Jezero crater — delta front';
+export const SITE_NAME = 'Jezero crater region';

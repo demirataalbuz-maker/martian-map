@@ -10,6 +10,12 @@ export interface RouterTraverser {
   maxTimeS: number | null;
 }
 
+/** Apollo walk-back survival rule parameters (elapsed time + walking return time <= limitS). */
+export interface WalkBackSpec {
+  traverser: RouterTraverser;
+  limitS: number;
+}
+
 export interface LandingCandidate {
   /** Cell index (row * width + col) of the landing zone centre. */
   cell: number;
@@ -25,6 +31,7 @@ export interface TraverserComparisonEntry {
   id: string;
   name: string;
   traverser: RouterTraverser;
+  walkBack?: WalkBackSpec | null;
 }
 
 export interface TraverserComparisonRow {
@@ -37,6 +44,7 @@ export interface TraverserComparisonRow {
   stopTime_s?: number;
   maxSlope_deg?: number;
   withinLimit?: boolean;
+  walkBackExceeded?: boolean;
   marginalLanding?: boolean;
   failReason?: string;
 }
@@ -81,6 +89,8 @@ export type ToWorker =
       /** When true, allows crossing unmapped (no-data = 255) cells at slowest speed; default false (blocked). */
       allowNoData?: boolean;
       traverser: RouterTraverser;
+      /** Optional Apollo walk-back survival check (used for crewed rover). */
+      walkBack?: WalkBackSpec | null;
     }
   | {
       type: 'probe';
@@ -137,6 +147,14 @@ export interface RouteSuccess {
   /** Last cell along the path before cumulative mission time exceeds maxTimeS (null when within limit). */
   turnAroundCell: number | null;
   turnAroundDist_m: number | null;
+  /** Apollo walk-back survival check results (non-null when walk-back applies, e.g. crewed rover). */
+  walkBackLimit_s: number | null;
+  maxWalkBackTotal_s: number | null;
+  walkBackExceeded: boolean;
+  walkBackCell: number | null;
+  walkBackDist_m: number | null;
+  /** Per path cell: 1 where mission time or walk-back survival limit is exceeded, 0 where safe; null when wholly safe. */
+  unsafeMask: Uint8Array | null;
   /** Per path cell: distance from the start in metres (grid-based). */
   profileDist: Float32Array;
   /** Per path cell: slope in degrees, NaN where there is no data. */

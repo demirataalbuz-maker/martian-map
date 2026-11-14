@@ -4,7 +4,7 @@
 // each parameter of the selected traverser (and landing craft constraints)
 // together with its stated source and confidence level.
 
-import type { ConfidenceLevel, LandingCraftParams, Traverser } from './data';
+import type { ConfidenceLevel, GridMeta, LandingCraftParams, Traverser } from './data';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -67,12 +67,44 @@ export interface TraverserSelectorController {
   selectById(id: string): void;
 }
 
+export function findWalkBackReference(traversers: Traverser[], current: Traverser): { walker: Traverser; limitHours: number; source?: string; conf?: ConfidenceLevel } | null {
+  const usesWalkBack = current.yuruyus_donus === true || (current.yuruyus_donus !== false && current.id === 'roverli_insan');
+  if (!usesWalkBack) return null;
+  const walker = traversers.find((x) => x.id === 'yuruyen_insan' || x.id === 'suited_astronaut');
+  if (!walker || walker.id === current.id) return null;
+  if (present(current.yasam_destek_saat) && current.yasam_destek_saat > 0) {
+    return {
+      walker,
+      limitHours: current.yasam_destek_saat,
+      source: current.kaynaklar.yasam_destek_saat,
+      conf: current.guvenler.yasam_destek_saat,
+    };
+  }
+  if (present(walker.azami_sure_saat) && walker.azami_sure_saat > 0) {
+    return {
+      walker,
+      limitHours: walker.azami_sure_saat,
+      source: walker.kaynaklar.azami_sure_saat,
+      conf: walker.guvenler.azami_sure_saat,
+    };
+  }
+  if (present(current.azami_sure_saat) && current.azami_sure_saat > 0) {
+    return {
+      walker,
+      limitHours: current.azami_sure_saat,
+      source: current.kaynaklar.azami_sure_saat,
+      conf: current.guvenler.azami_sure_saat,
+    };
+  }
+  return null;
+}
+
 export function initTraverserSelector(
   traversers: Traverser[],
   landingCraft: LandingCraftParams | null,
   root: HTMLElement,
   onChange: (traverser: Traverser) => void,
-  slopeBaselineM?: number,
+  grid?: Pick<GridMeta, 'egim_taban_uzunlugu_m' | 'egim_yontemi_en' | 'kaynak_en' | 'guven_notu_en'>,
 ): TraverserSelectorController {
   root.replaceChildren();
 
@@ -90,19 +122,32 @@ export function initTraverserSelector(
   const list = el('dl', 'facts');
   details.append(summary, methodNote, list);
 
+  const slopeBaselineM = grid?.egim_taban_uzunlugu_m;
+
   const showParameters = (t: Traverser): void => {
     noteEl.textContent = t.aciklama_en ?? '';
     noteEl.hidden = !t.aciklama_en;
     list.replaceChildren();
     if (present(slopeBaselineM) && slopeBaselineM > 0) {
       const dd = el('dd', undefined, `${slopeBaselineM} m`);
-      dd.append(el('span', 'source', 'Grid slope measurement baseline (izgara.json)'));
+      dd.append(el('span', 'source', grid?.egim_yontemi_en || 'Grid slope measurement baseline (izgara.json)'));
       list.append(el('dt', undefined, 'Slope baseline'), dd);
+    }
+    if (grid?.kaynak_en) {
+      const dd = el('dd', undefined, grid.kaynak_en);
+      if (grid.guven_notu_en) dd.append(el('span', 'source', `Confidence: ${grid.guven_notu_en}`));
+      list.append(el('dt', undefined, 'Cost grid'), dd);
     }
     for (const row of parameterRows(t)) {
       const dd = el('dd', undefined, row.value);
       dd.append(el('span', 'source', formatMeta(t.kaynaklar[row.key], t.guvenler[row.key])));
       list.append(el('dt', undefined, row.label), dd);
+    }
+    const wb = findWalkBackReference(traversers, t);
+    if (wb) {
+      const dd = el('dd', undefined, `${wb.limitHours} h (elapsed + walk-back ≤ suit limit; walk ≤ ${wb.walker.azami_egim_derece}°)`);
+      dd.append(el('span', 'source', `${formatMeta(wb.source, wb.conf)} · Walk speeds from "${wb.walker.ad_en}"`));
+      list.append(el('dt', undefined, 'Walk-back limit'), dd);
     }
     if (landingCraft) {
       for (const row of landingRows(landingCraft)) {

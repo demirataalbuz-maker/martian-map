@@ -58,15 +58,16 @@ Key contract details:
 - No limit, speed or duration is hard-coded; they come from `mobilite_parametreleri.json`.
 - Distance and time are computed from the cost grid (cells × `hucre_m`, diagonal × 1.414), never from the map library, which assumes Earth's radius. The scale bar is drawn by this app from the grid for the same reason.
 - "No data" (255) and "forbidden" (2) are different things and are shown differently.
-- No Earth basemap tiles. Layers are placed as images by their four corners.
+- No Earth basemap tiles or external CDNs. Layers are served locally as Web Mercator XYZ raster tile pyramids (`karolar`) or placed by their four corners (`koseler`).
 - Raw mission data is not stored in this repository.
 
 ## Result panel, mission options and warnings
 
-- Mission options: optional round-trip return to landing / start, configurable work duration per science stop, policy toggle for unmapped ("no data") terrain, 1-click sample mission, live Mars terrain cursor/tap HUD, and side-by-side comparison across all traversers.
-- Totals: distance, estimated mission time (with travel + stop work breakdown), steepest slope (with measurement baseline), climb / descent, per-leg figures.
-- Elevation and slope profiles are plain SVG drawn by the app (no chart library), marking stops, no-data spans, and any max-duration turn-around point.
-- Warnings: estimated time above `azami_sure_saat`; marginal landing zone fallback; slope close to the limit; crossing "no data"; crossing "caution" (all step-weighted with diagonal × √2).
+- Mission options: round-trip return to landing / start (enabled by default), configurable work duration per science stop, policy toggle for unmapped ("no data") terrain (blocked by default), 1-click sample mission, live Mars terrain cursor/tap HUD, and side-by-side comparison across all traversers.
+- Thematic overlays (`tur !== 'altlik'`) start hidden with 65% default opacity so the primary basemap stays legible underneath when toggled on.
+- Totals: distance, estimated mission time (with travel + stop work breakdown), steepest slope (with measurement baseline), climb / descent, crewed rover walk-back check, and per-leg figures.
+- Elevation and slope profiles are plain SVG drawn by the app (no chart library), marking stops, no-data spans, and any max-duration or walk-back threshold point.
+- Warnings: estimated time above `azami_sure_saat`; Apollo walk-back survival limit exceeded on crewed rover routes (full route stays drawn with unsafe segments highlighted in dashed red and a `!` threshold marker); marginal landing zone fallback; slope close to the limit; crossing "no data"; crossing "caution" (all step-weighted with diagonal × √2).
 - "Close to the limit" uses the optional `uyari_egim_derece` field of a traverser; without it, the highest positive speed-table breakpoint below the limit is used.
 - Without `maliyet/yukseklik.bin` the app still works and says the elevation profile is unavailable.
 
@@ -97,3 +98,4 @@ Worker). All numbers come from the data files:
 - cell speed = the traverser's speed table interpolated at the cell's slope (speed depends on slope magnitude only; uphill and downhill are treated the same)
 - impassable = hazard class 2 (forbidden) or slope above the traverser's limit; diagonal steps never cut a blocked corner
 - "caution" cells are passable at the slowest speed in the traverser's table and trigger a route warning; unmapped ("no data", 255) cells are **not crossed by default** (distinct from "forbidden" 2, with a dedicated message) and can optionally be allowed at slowest speed with a warning via the UI toggle
+- for crewed rover traverses (`roverli_insan` or `yuruyus_donus: true`), a grid Dijkstra walk-back time field from the start / landing cell using the suited walking astronaut speed table checks `elapsed_time(n) + walk_back_time(n) ≤ suit_life_support_limit` at every step along the route

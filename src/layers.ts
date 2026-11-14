@@ -20,13 +20,19 @@ function formatResolution(metres: number): string {
 
 /**
  * Adds every catalogue layer to the map (catalogue order = bottom to top) and
- * renders its controls. Only the first layer starts visible.
+ * renders its controls. By default only the primary basemap starts visible, and
+ * thematic overlays (tur !== 'altlik') start translucent so the basemap remains
+ * legible underneath when toggled on.
  */
 export function initLayerPanel(map: MlMap, layers: LayerDef[], root: HTMLElement): void {
   root.replaceChildren();
 
   layers.forEach((layer, index) => {
-    const visible = index === 0;
+    const visible = layer.varsayilan_acik !== undefined ? layer.varsayilan_acik : index === 0;
+    const isOverlay = Boolean(layer.tur) && layer.tur.toLowerCase() !== 'altlik';
+    const initialOpacity = layer.varsayilan_saydamlik !== undefined ? layer.varsayilan_saydamlik : isOverlay ? 0.65 : 1;
+    const initialPct = Math.round(initialOpacity * 100);
+
     if (layer.karolar) {
       map.addSource(layer.id, {
         type: 'raster',
@@ -49,7 +55,7 @@ export function initLayerPanel(map: MlMap, layers: LayerDef[], root: HTMLElement
       type: 'raster',
       source: layer.id,
       layout: { visibility: visible ? 'visible' : 'none' },
-      paint: { 'raster-fade-duration': 0, 'raster-opacity': 1 },
+      paint: { 'raster-fade-duration': 0, 'raster-opacity': initialOpacity },
     });
 
     const item = el('section', 'layer');
@@ -69,9 +75,9 @@ export function initLayerPanel(map: MlMap, layers: LayerDef[], root: HTMLElement
     slider.min = '0';
     slider.max = '100';
     slider.step = '5';
-    slider.value = '100';
+    slider.value = String(initialPct);
     slider.disabled = !visible;
-    const opacityValue = el('output', undefined, '100%');
+    const opacityValue = el('output', undefined, `${initialPct}%`);
     opacityRow.append(el('span', undefined, 'Opacity'), slider, opacityValue);
 
     toggle.addEventListener('change', () => {

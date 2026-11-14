@@ -14,6 +14,7 @@ import { ELEVATION_URL, HAZARD_URL, LANDING_URL, SLOPE_URL } from './config';
 import type { GridMeta, LandingCraftParams, LonLat, ScienceStop, Traverser } from './data';
 import type { GridGeo } from './grid';
 import { formatDuration, renderComparison, renderResults } from './results';
+import { findWalkBackReference } from './traverser';
 import type {
   FromWorker,
   LandingCandidate,
@@ -21,9 +22,11 @@ import type {
   RouterTraverser,
   ToWorker,
   TraverserComparisonRow,
+  WalkBackSpec,
 } from './route-types';
 
 const ROUTE_SOURCE = 'route';
+const ROUTE_UNSAFE_SOURCE = 'route-unsafe-src';
 
 const absoluteUrl = (url: string): string => new URL(url, document.baseURI).href;
 const fmtMB = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1);
@@ -120,7 +123,7 @@ export function initRoute(
   let lastResult: RouteSuccess | null = null;
   const markers: Marker[] = [];
   const landingMarkers: Marker[] = [];
-  let turnAroundMarker: Marker | null = null;
+  const turnAroundMarkers: Marker[] = [];
   let ready = false;
   let startupDone = false;
   let elevationRequestedOnce = false;
@@ -149,8 +152,15 @@ export function initRoute(
     lastCompareRows = null;
   };
 
+  const walkBackSpecFor = (t: Traverser): WalkBackSpec | null => {
+    const wb = findWalkBackReference(options.traversers, t);
+    if (!wb) return null;
+    return { traverser: toRouterTraverser(wb.walker), limitS: wb.limitHours * 3600 };
+  };
+
   // ------------------------------------------------------------ map layers
   map.addSource(ROUTE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addSource(ROUTE_UNSAFE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({
     id: 'route-casing',
     type: 'line',
@@ -165,12 +175,42 @@ export function initRoute(
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': '#4fd8ff', 'line-width': 3.5 },
   });
+  map.addLayer({
+    id: 'route-unsafe',
+    type: 'line',
+    source: ROUTE_UNSAFE_SOURCE,
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#ff6b6b', 'line-width': 3.8, 'line-dasharray': [2, 1.6] },
+  });
 
-  const setLine = (path: Int32Array | null): void => {
+  const setLine = (path: Int32Array | null, unsafeMask?: Uint8Array | null): void => {
     const coordinates = path ? Array.from(path, (cell) => geo.indexToLonLat(cell)) : [];
     (map.getSource(ROUTE_SOURCE) as GeoJSONSource).setData({
       type: 'FeatureCollection',
       features: coordinates.length >= 2 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } }] : [],
+    });
+
+    const unsafeFeatures: { type: 'Feature'; properties: Record<string, never>; geometry: { type: 'LineString'; coordinates: LonLat[] } }[] = [];
+    if (path && unsafeMask && unsafeMask.length === path.length && coordinates.length >= 2) {
+      let seg: LonLat[] = [];
+      for (let k = 0; k < unsafeMask.length; k++) {
+        if (unsafeMask[k] === 1) {
+          if (seg.length === 0 && k > 0) seg.push(coordinates[k - 1]);
+          seg.push(coordinates[k]);
+        } else if (seg.length > 0) {
+          if (seg.length >= 2) {
+            unsafeFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: seg } });
+          }
+          seg = [];
+        }
+      }
+      if (seg.length >= 2) {
+        unsafeFeatures.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: seg } });
+      }
+    }
+    (map.getSource(ROUTE_UNSAFE_SOURCE) as GeoJSONSource).setData({
+      type: 'FeatureCollection',
+      features: unsafeFeatures,
     });
   };
 
@@ -204,10 +244,7 @@ export function initRoute(
   };
 
   const clearTurnAroundMarker = (): void => {
-    if (turnAroundMarker) {
-      turnAroundMarker.remove();
-      turnAroundMarker = null;
-    }
+    turnAroundMarkers.splice(0).forEach((m) => m.remove());
   };
 
   const clearLandingUI = (): void => {
@@ -363,6 +400,7 @@ export function initRoute(
         id: t.id,
         name: t.ad_en,
         traverser: toRouterTraverser(t),
+        walkBack: walkBackSpecFor(t),
       })),
     });
   };
@@ -377,14 +415,28 @@ export function initRoute(
     downloadButton.disabled = lastResult === null;
     renderResults(results, result, traverser, grid.egim_taban_uzunlugu_m);
 
-    if (lastResult && lastResult.turnAroundCell !== null) {
+    if (lastResult && lastResult.walkBackExceeded && lastResult.walkBackCell !== null) {
+      const el = document.createElement('div');
+      el.className = 'waypoint turnaround';
+      el.textContent = '!';
+      const wbHours = lastResult.walkBackLimit_s ? Number((lastResult.walkBackLimit_s / 3600).toFixed(2)) : 0;
+      el.title = `Walk-back survival limit (${wbHours} h) exceeded beyond ~${Math.round(lastResult.walkBackDist_m ?? 0)} m: if the rover fails past this point, walking back exceeds suit life support`;
+      el.setAttribute('aria-label', el.title);
+      turnAroundMarkers.push(new Marker({ element: el }).setLngLat(geo.indexToLonLat(lastResult.walkBackCell)).addTo(map));
+    }
+
+    if (
+      lastResult &&
+      lastResult.turnAroundCell !== null &&
+      lastResult.turnAroundCell !== lastResult.walkBackCell
+    ) {
       const el = document.createElement('div');
       el.className = 'waypoint turnaround';
       el.textContent = '!';
       const limitLabel = traverser.azami_sure_saat ? `${traverser.azami_sure_saat} h` : 'max';
       el.title = `Max mission duration (${limitLabel}) reached around ${Math.round(lastResult.turnAroundDist_m ?? 0)} m along the route`;
       el.setAttribute('aria-label', el.title);
-      turnAroundMarker = new Marker({ element: el }).setLngLat(geo.indexToLonLat(lastResult.turnAroundCell)).addTo(map);
+      turnAroundMarkers.push(new Marker({ element: el }).setLngLat(geo.indexToLonLat(lastResult.turnAroundCell)).addTo(map));
     }
 
     refreshComparison();
@@ -434,6 +486,7 @@ export function initRoute(
       stopWorkS: currentStopWorkS(),
       allowNoData: allowNoDataInput.checked,
       traverser: toRouterTraverser(traverser),
+      walkBack: walkBackSpecFor(traverser),
     });
   };
 
@@ -569,7 +622,7 @@ export function initRoute(
     if (msg.ok) {
       if (msg.legs.length > 0) elevationRequestedOnce = true;
       renderLandingCandidates(msg.landingCandidates, msg.activeLandingCell);
-      setLine(msg.path);
+      setLine(msg.path, msg.unsafeMask);
       renderSummary(msg);
       if (fitToResultOnce && msg.path.length > 0) {
         fitToResultOnce = false;
@@ -871,6 +924,13 @@ export function initRoute(
             stop_work_time_s: Math.round(result.stopTime_s),
             no_data_m: round(result.noDataM, 1),
             caution_m: round(result.cautionM, 1),
+            ...(result.walkBackLimit_s !== null
+              ? {
+                  walk_back_limit_s: Math.round(result.walkBackLimit_s),
+                  walk_back_exceeded: result.walkBackExceeded,
+                  walk_back_threshold_m: result.walkBackDist_m !== null ? round(result.walkBackDist_m, 1) : null,
+                }
+              : {}),
             legs: result.legs.map((leg) => ({
               distance_m: round(leg.distance_m, 1),
               estimated_time_s: Math.round(leg.time_s),

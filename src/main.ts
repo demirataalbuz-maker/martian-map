@@ -88,7 +88,7 @@ async function start(): Promise<void> {
         mobility.landingCraft,
         document.getElementById('route-traverser')!,
         (t) => routeRef?.setTraverser(t),
-        grid.egim_taban_uzunlugu_m,
+        grid,
       );
       const route = initRoute(map, grid, geo, mobility.traversers[0], document.getElementById('route-panel')!, {
         synthetic,

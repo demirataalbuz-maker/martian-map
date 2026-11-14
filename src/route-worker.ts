@@ -19,6 +19,7 @@ import type {
   RouterTraverser,
   ToWorker,
   TraverserComparisonRow,
+  WalkBackSpec,
 } from './route-types';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -801,6 +802,179 @@ function measure(path: number[]): RouteLeg {
   return { distance_m: distance, time_s: time };
 }
 
+/**
+ * Computes exact shortest walking return time (seconds) from every cell in `full`
+ * back to `originCell` using `walkBack.traverser`'s speed table and slope limit.
+ * Uses symmetric undirected edge costs via a single windowed Dijkstra from `originCell`,
+ * clipped at `walkBack.limitS` because any cell with walk time > limitS already violates
+ * `elapsed + walkBack <= limitS`.
+ */
+function computeWalkBackTimes(
+  originCell: number,
+  full: number[],
+  walkBack: WalkBackSpec,
+  allowNoData: boolean,
+  clipAtLimit = false,
+): Float64Array {
+  const out = new Float64Array(full.length);
+  out.fill(Infinity);
+  const limitS = walkBack.limitS;
+  if (full.length === 0 || !(limitS > 0)) return out;
+
+  prepareSpeeds(walkBack.traverser, allowNoData);
+
+  if (cellSpeedAt(originCell) === 0 || maxSpeed <= 0) {
+    for (let k = 0; k < full.length; k++) {
+      if (full[k] === originCell) out[k] = 0;
+    }
+    return out;
+  }
+
+  const oCol = originCell % width;
+  const oRow = (originCell - oCol) / width;
+  const gridSpan = Math.max(width, height);
+  const searchCapS = clipAtLimit ? limitS : limitS * 6;
+
+  let maxPassableCheb = 0;
+  for (let k = 0; k < full.length; k++) {
+    const c = full[k];
+    if (c === originCell || cellSpeedAt(c) === 0) continue;
+    const cc = c % width;
+    const cr = (c - cc) / width;
+    const cheb = Math.max(Math.abs(cc - oCol), Math.abs(cr - oRow));
+    if (cheb > maxPassableCheb) maxPassableCheb = cheb;
+  }
+
+  const maxRangeCells = Number.isFinite(limitS)
+    ? clipAtLimit
+      ? Math.max(1, Math.min(gridSpan, Math.ceil((maxSpeed * limitS) / cellM) + 2))
+      : Math.max(
+          1,
+          Math.min(gridSpan, Math.max(maxPassableCheb * 2 + 128, Math.ceil((maxSpeed * limitS * 2) / cellM) + 16)),
+        )
+    : gridSpan;
+
+  const targetCells = new Set<number>();
+  let maxTargetCheb = 0;
+  for (let k = 0; k < full.length; k++) {
+    const c = full[k];
+    if (c === originCell) continue;
+    if (cellSpeedAt(c) === 0) continue;
+    const cc = c % width;
+    const cr = (c - cc) / width;
+    const cheb = Math.max(Math.abs(cc - oCol), Math.abs(cr - oRow));
+    if (cheb > maxRangeCells) continue;
+    targetCells.add(c);
+    if (cheb > maxTargetCheb) maxTargetCheb = cheb;
+  }
+
+  if (targetCells.size === 0) {
+    for (let k = 0; k < full.length; k++) {
+      if (full[k] === originCell) out[k] = 0;
+    }
+    return out;
+  }
+
+  const diagonal = cellM * Math.SQRT2;
+  let radius = Math.min(maxRangeCells, Math.max(160, Math.ceil(maxTargetCheb * 1.35) + 16));
+
+  for (;;) {
+    const c0 = Math.max(0, oCol - radius);
+    const c1 = Math.min(width - 1, oCol + radius);
+    const r0 = Math.max(0, oRow - radius);
+    const r1 = Math.min(height - 1, oRow + radius);
+    const atMaxWindow = (c0 === 0 && c1 === width - 1 && r0 === 0 && r1 === height - 1) || radius >= maxRangeCells;
+
+    const winW = c1 - c0 + 1;
+    const winH = r1 - r0 + 1;
+    ensureWindow(winW * winH);
+
+    const openMark = nextSearchMark();
+    const closedMark = openMark + 1;
+    const startLocal = (oRow - r0) * winW + (oCol - c0);
+
+    const settled = new Map<number, number>();
+    let maxSettledTargetG = 0;
+    let firstUnclippedBorderTime = Infinity;
+
+    const open = new MinHeap();
+    stamp[startLocal] = openMark;
+    gScore[startLocal] = 0;
+    parentDir[startLocal] = PARENT_NONE;
+    open.push(0, startLocal);
+
+    let allTargetsOptimal = false;
+    while (open.size > 0) {
+      const curLocal = open.pop();
+      if (stamp[curLocal] === closedMark) continue;
+      const currentG = isSeen(curLocal, openMark) ? gScore[curLocal] : Infinity;
+      if (currentG > searchCapS) break;
+      stamp[curLocal] = closedMark;
+
+      const lCol = curLocal % winW;
+      const lRow = (curLocal - lCol) / winW;
+      const col = c0 + lCol;
+      const row = r0 + lRow;
+      if (firstUnclippedBorderTime === Infinity && isOnUnclippedBorder(col, row, c0, r0, c1, r1)) {
+        firstUnclippedBorderTime = currentG;
+      }
+
+      const curGlobal = row * width + col;
+      if (targetCells.has(curGlobal)) {
+        settled.set(curGlobal, currentG);
+        if (currentG > maxSettledTargetG) maxSettledTargetG = currentG;
+        if (settled.size === targetCells.size) {
+          if (atMaxWindow || maxSettledTargetG <= firstUnclippedBorderTime) {
+            allTargetsOptimal = true;
+          }
+          break;
+        }
+      }
+
+      const speedHere = cellSpeedAt(curGlobal);
+      for (let d = 0; d < 8; d++) {
+        const dc = NEIGHBOUR_DC[d];
+        const dr = NEIGHBOUR_DR[d];
+        const nlCol = lCol + dc;
+        const nlRow = lRow + dr;
+        if (nlCol < 0 || nlRow < 0 || nlCol >= winW || nlRow >= winH) continue;
+        const nextLocal = nlRow * winW + nlCol;
+        if (stamp[nextLocal] === closedMark) continue;
+        const nc = col + dc;
+        const nr = row + dr;
+        const speedNext = cellSpeedAt(nr * width + nc);
+        if (speedNext === 0) continue;
+        const isDiagonal = d >= 4;
+        if (isDiagonal && (cellSpeedAt(row * width + nc) === 0 || cellSpeedAt(nr * width + col) === 0)) continue;
+        const stepTime = (isDiagonal ? diagonal : cellM) / Math.min(speedHere, speedNext);
+        const tentative = currentG + stepTime;
+        if (tentative > searchCapS) continue;
+        const prevG = stamp[nextLocal] === openMark ? gScore[nextLocal] : Infinity;
+        if (tentative < prevG) {
+          stamp[nextLocal] = openMark;
+          gScore[nextLocal] = tentative;
+          parentDir[nextLocal] = d;
+          open.push(tentative, nextLocal);
+        }
+      }
+    }
+
+    if (allTargetsOptimal || atMaxWindow || firstUnclippedBorderTime === Infinity) {
+      for (let k = 0; k < full.length; k++) {
+        const c = full[k];
+        if (c === originCell) out[k] = 0;
+        else {
+          const t = settled.get(c);
+          if (t !== undefined) out[k] = t;
+        }
+      }
+      return out;
+    }
+
+    radius = Math.min(maxRangeCells, radius * 2);
+  }
+}
+
 interface MissionPlanOk {
   ok: true;
   effectiveMode: 'manual' | 'auto-landing';
@@ -990,6 +1164,8 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
     const profileDist = new Float32Array(full.length);
     const profileSlope = new Float32Array(full.length);
     const profileElev = hasElevation && planned.legs.length > 0 ? new Float32Array(full.length) : null;
+    const cumArrival = new Float64Array(full.length);
+    const cumAfterStop = new Float64Array(full.length);
     const diagonal = cellM * Math.SQRT2;
 
     const maxTimeS =
@@ -1002,8 +1178,6 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
     let cumTime = 0;
     let noDataM = 0;
     let cautionM = 0;
-    let lastWithinCell = full.length > 0 ? full[0] : null;
-    let lastWithinDist = 0;
 
     for (let k = 0; k < full.length; k++) {
       const cell = full[k];
@@ -1020,14 +1194,12 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
         cautionM += step * cWeight;
       }
 
-      if (maxTimeS !== null && cumTime <= maxTimeS) {
-        lastWithinCell = cell;
-        lastWithinDist = along;
-      }
+      cumArrival[k] = cumTime;
       const stopsHere = stopCountsInFull.get(k);
       if (stopsHere) {
         cumTime += stopsHere * perStopS;
       }
+      cumAfterStop[k] = cumTime;
 
       profileDist[k] = along;
       profileSlope[k] = isNoData(cell) ? NaN : slopeDegAt(cell);
@@ -1037,6 +1209,56 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
     }
 
     const exceededLimit = maxTimeS !== null && planned.legs.length > 0 && planned.time_s > maxTimeS;
+    let turnAroundCell: number | null = null;
+    let turnAroundDist_m: number | null = null;
+    if (exceededLimit && full.length > 0) {
+      for (let k = 0; k < full.length; k++) {
+        if (cumAfterStop[k] > maxTimeS) {
+          const tIdx = cumArrival[k] > maxTimeS && k > 0 ? k - 1 : k;
+          turnAroundCell = full[tIdx];
+          turnAroundDist_m = profileDist[tIdx];
+          break;
+        }
+      }
+    }
+
+    const activeWalkBack =
+      msg.walkBack && typeof msg.walkBack.limitS === 'number' && Number.isFinite(msg.walkBack.limitS) && msg.walkBack.limitS > 0
+        ? msg.walkBack
+        : null;
+    let walkBackLimit_s: number | null = null;
+    let maxWalkBackTotal_s: number | null = null;
+    let walkBackExceeded = false;
+    let walkBackCell: number | null = null;
+    let walkBackDist_m: number | null = null;
+    let walkTimes: Float64Array | null = null;
+
+    if (activeWalkBack && planned.legs.length > 0 && full.length > 0) {
+      walkBackLimit_s = activeWalkBack.limitS;
+      walkTimes = computeWalkBackTimes(full[0], full, activeWalkBack, allowNoData);
+      let peakTotal = 0;
+      for (let k = 0; k < full.length; k++) {
+        const totalAfter = cumAfterStop[k] + walkTimes[k];
+        if (totalAfter > peakTotal) peakTotal = totalAfter;
+        if (!walkBackExceeded && totalAfter > walkBackLimit_s) {
+          walkBackExceeded = true;
+          const wbIdx = cumArrival[k] + walkTimes[k] > walkBackLimit_s && k > 0 ? k - 1 : k;
+          walkBackCell = full[wbIdx];
+          walkBackDist_m = profileDist[wbIdx];
+        }
+      }
+      maxWalkBackTotal_s = peakTotal;
+    }
+
+    let unsafeMask: Uint8Array | null = null;
+    if ((exceededLimit || walkBackExceeded) && full.length > 0) {
+      unsafeMask = new Uint8Array(full.length);
+      for (let k = 0; k < full.length; k++) {
+        const overTime = maxTimeS !== null && cumAfterStop[k] > maxTimeS;
+        const overWalk = walkBackLimit_s !== null && walkTimes !== null && cumAfterStop[k] + walkTimes[k] > walkBackLimit_s;
+        if (overTime || overWalk) unsafeMask[k] = 1;
+      }
+    }
 
     post(
       {
@@ -1058,13 +1280,25 @@ async function route(msg: Extract<ToWorker, { type: 'route' }>): Promise<void> {
         cautionCells,
         noDataM,
         cautionM,
-        turnAroundCell: exceededLimit ? lastWithinCell : null,
-        turnAroundDist_m: exceededLimit ? lastWithinDist : null,
+        turnAroundCell,
+        turnAroundDist_m,
+        walkBackLimit_s,
+        maxWalkBackTotal_s,
+        walkBackExceeded,
+        walkBackCell,
+        walkBackDist_m,
+        unsafeMask,
         profileDist,
         profileSlope,
         profileElev,
       },
-      [path.buffer, profileDist.buffer, profileSlope.buffer, ...(profileElev ? [profileElev.buffer] : [])],
+      [
+        path.buffer,
+        profileDist.buffer,
+        profileSlope.buffer,
+        ...(profileElev ? [profileElev.buffer] : []),
+        ...(unsafeMask ? [unsafeMask.buffer] : []),
+      ],
     );
   } finally {
     trimWindowBuffers();
@@ -1115,6 +1349,41 @@ function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
           ? true
           : res.time_s <= entry.traverser.maxTimeS;
 
+      let walkBackExceeded = false;
+      if (
+        entry.walkBack &&
+        typeof entry.walkBack.limitS === 'number' &&
+        Number.isFinite(entry.walkBack.limitS) &&
+        entry.walkBack.limitS > 0 &&
+        res.legs.length > 0 &&
+        res.full.length > 0
+      ) {
+        prepareSpeeds(entry.traverser, msg.allowNoData);
+        const perStopS = Math.max(0, Number.isFinite(msg.stopWorkS) ? msg.stopWorkS : 0);
+        const diagonal = cellM * Math.SQRT2;
+        const cumAfter = new Float64Array(res.full.length);
+        let t = 0;
+        for (let k = 0; k < res.full.length; k++) {
+          const cell = res.full[k];
+          if (k > 0) {
+            const prev = res.full[k - 1];
+            const isDiag = prev % width !== cell % width && Math.floor(prev / width) !== Math.floor(cell / width);
+            const step = isDiag ? diagonal : cellM;
+            t += step / Math.min(cellSpeedAt(prev), cellSpeedAt(cell));
+          }
+          const stopsHere = res.stopCountsInFull.get(k);
+          if (stopsHere) t += stopsHere * perStopS;
+          cumAfter[k] = t;
+        }
+        const wbTimes = computeWalkBackTimes(res.full[0], res.full, entry.walkBack, msg.allowNoData, true);
+        for (let k = 0; k < res.full.length; k++) {
+          if (cumAfter[k] + wbTimes[k] > entry.walkBack.limitS) {
+            walkBackExceeded = true;
+            break;
+          }
+        }
+      }
+
       return {
         id: entry.id,
         name: entry.name,
@@ -1125,6 +1394,7 @@ function compareTraversers(msg: Extract<ToWorker, { type: 'compare' }>): void {
         stopTime_s: res.stopTime_s,
         maxSlope_deg: maxSlope,
         withinLimit,
+        walkBackExceeded,
         marginalLanding: res.marginalLanding,
       };
     });

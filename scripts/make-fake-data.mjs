@@ -622,7 +622,7 @@ const mobility = {
     azami_egim_derece: param(6),
     azami_kaya_m: param(0.35),
     azami_yukseklik_m: param(-2000),
-    guvenli_alan_capi_m: param(SAFE_DIAMETER_M, 'Placeholder until Çağatay supplies lander footprint diameter', 'VARSAYIM'),
+    guvenli_alan_capi_m: param(SAFE_DIAMETER_M),
   },
   yuruyen_insan: dictTraverser(
     'Walking astronaut (suited)',

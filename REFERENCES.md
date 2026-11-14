@@ -26,4 +26,5 @@ Every library, tool and data source used by this project.
 
 | Tool | Used for |
 | --- | --- |
-| Claude (Anthropic), via Claude Code | Writing and reviewing application code and the synthetic data generator |
+| Claude (Anthropic), via Claude Code | Writing and reviewing application code, presentation drafts, and the synthetic data generator |
+| Antigravity (Google DeepMind) | Writing, auditing, and testing application code, performance optimizations, and presentation drafts |
