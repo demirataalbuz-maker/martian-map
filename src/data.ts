@@ -3,6 +3,7 @@
 
 import {
   CAGATAY_MOBILITY_URL,
+  DATA_CACHE_TAG,
   DATA_DIR,
   GRID_URL,
   KURE_DUST_URL,
@@ -451,7 +452,11 @@ export async function loadOptionalGridMeta(url: string): Promise<GridMeta | null
   }
 }
 
-export const layerImageUrl = (layer: LayerDef): string => new URL(`${DATA_DIR}/${layer.dosya}`, document.baseURI).href;
+export const layerImageUrl = (layer: LayerDef): string => {
+  const u = new URL(`${DATA_DIR}/${layer.dosya}`, document.baseURI);
+  u.searchParams.set('v', DATA_CACHE_TAG);
+  return u.href;
+};
 
 /**
  * Resolves a relative tile template against document.baseURI so MapLibre's
@@ -459,9 +464,10 @@ export const layerImageUrl = (layer: LayerDef): string => new URL(`${DATA_DIR}/$
  * percent-encoding the {z}/{x}/{y} placeholders.
  */
 export function layerTileUrl(karolar: string): string {
-  if (/^https?:\/\//i.test(karolar)) return karolar;
-  const base = new URL(`${DATA_DIR}/`, document.baseURI).href;
-  return `${base}${karolar.replace(/^\/+/, '')}`;
+  const raw = /^https?:\/\//i.test(karolar)
+    ? karolar
+    : `${new URL(`${DATA_DIR}/`, document.baseURI).href}${karolar.replace(/^\/+/, '')}`;
+  return `${raw}${raw.includes('?') ? '&' : '?'}v=${DATA_CACHE_TAG}`;
 }
 
 // ------------------------------------------------------------ mobility & landing craft parameters

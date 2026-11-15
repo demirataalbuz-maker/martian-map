@@ -7,6 +7,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import {
   CRATER_FEATURES_GEOJSON_URL,
+  DATA_CACHE_TAG,
   ELLIPSE_GEOJSON_URL,
   FINE_GRID_URL,
   PLACE_NAMES_GEOJSON_URL,
@@ -47,7 +48,7 @@ const PLACE_LABEL_MIN_ZOOM = 8.8;
 const HIRISE_LOCK_BOUNDS = new LngLatBounds([77.16, 18.25], [77.65, 18.73]);
 const HIRISE_MIN_ZOOM = 10.0;
 const LIVE_SITE_URL = 'https://demirataalbuz-maker.github.io/martian-map/';
-const LIVE_QR_SVG_URL = `${import.meta.env.BASE_URL}live_qr.svg`;
+const LIVE_QR_SVG_URL = `${import.meta.env.BASE_URL}live_qr.svg?v=${DATA_CACHE_TAG}`;
 
 const statusEl = document.getElementById('status')!;
 let fatalErrorEl: HTMLElement | null = null;
@@ -131,7 +132,11 @@ function showFatalError(err: unknown): void {
   retryBtn.type = 'button';
   retryBtn.className = 'error-retry-btn';
   retryBtn.textContent = ui('Retry loading', 'Yeniden dene');
-  retryBtn.addEventListener('click', () => window.location.reload());
+  retryBtn.addEventListener('click', () => {
+    const u = new URL(window.location.href);
+    u.searchParams.set('r', String(Date.now()));
+    window.location.replace(u.href);
+  });
 
   card.append(title, fileLine, reasonLine, hint, retryBtn);
   stage.append(card);
