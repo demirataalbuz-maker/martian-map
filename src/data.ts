@@ -1,7 +1,17 @@
 // AI-assisted code: written with Claude (Anthropic) and Antigravity (Google DeepMind), reviewed by the team.
 // Loaders and types for the team's data contract (field names are Turkish by agreement).
 
-import { DATA_DIR, GRID_URL, LAYERS_URL, MOBILITY_URL, STOPS_URL } from './config';
+import {
+  CAGATAY_MOBILITY_URL,
+  DATA_DIR,
+  GRID_URL,
+  KURE_DUST_URL,
+  KURE_META_URL,
+  KURE_RADIATION_URL,
+  LAYERS_URL,
+  MOBILITY_URL,
+  STOPS_URL,
+} from './config';
 
 export type LonLat = [number, number];
 /** Corner order: top-left (NW), top-right (NE), bottom-right (SE), bottom-left (SW). */
@@ -11,6 +21,7 @@ export type TileBounds = [number, number, number, number];
 export type TileScheme = 'xyz' | 'tms';
 export type SlopeEncoding = 'uint8' | 'float32';
 export type ElevationEncoding = 'int16' | 'float32';
+export type LayerArea = 'kure' | 'ctx' | 'hirise';
 
 export interface LegendEntry {
   renk: string;
@@ -19,6 +30,7 @@ export interface LegendEntry {
 
 export interface LayerDef {
   id: string;
+  alan?: LayerArea;
   ad_en: string;
   tur: string;
   /** Single-image source path (present when karolar is omitted). */
@@ -34,6 +46,7 @@ export interface LayerDef {
   varsayilan_acik?: boolean;
   varsayilan_saydamlik?: number;
   kaynak: string;
+  lisans?: string;
   cozunurluk_m: number;
   guven_notu_en: string;
   lejant?: LegendEntry[];
@@ -79,10 +92,48 @@ function cleanRelPath(file: string): string {
   return file.replace(/^\.?\//, '').replace(/^veri\//, '');
 }
 
-async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Could not load ${url} (HTTP ${res.status})`);
-  return res.json();
+/** Structured error thrown when fetching or decoding a JSON data file fails. */
+export class DataLoadError extends Error {
+  readonly url: string;
+  readonly reason: string;
+  readonly status?: number;
+
+  constructor(url: string, reason: string, status?: number) {
+    super(`Could not load "${url}": ${reason}`);
+    this.name = 'DataLoadError';
+    this.url = url;
+    this.reason = reason;
+    this.status = status;
+  }
+}
+
+export async function fetchJson(url: string): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new DataLoadError(url, `Network request failed (${detail})`);
+  }
+
+  if (!res.ok) {
+    const statusDesc = res.status === 404 ? 'File not found (HTTP 404)' : `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`;
+    throw new DataLoadError(url, statusDesc, res.status);
+  }
+
+  const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+  const text = await res.text();
+  const trimmed = text.trimStart();
+  if (ct.includes('text/html') || trimmed.startsWith('<')) {
+    throw new DataLoadError(url, 'File missing or misrouted (server returned HTML instead of JSON)', res.status);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new DataLoadError(url, `Invalid JSON (${detail})`, res.status);
+  }
 }
 
 export function assertCorners(value: unknown, where: string): asserts value is Corners {
@@ -146,7 +197,18 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
   if (!obj || !Array.isArray(obj.katmanlar) || obj.katmanlar.length === 0) {
     throw new Error('katmanlar.json contains no layers');
   }
-  const seenIds = new Set<string>(['background', 'route-casing', 'route-line', 'route-unsafe']);
+  const seenIds = new Set<string>([
+    'background',
+    'route-casing',
+    'route-line',
+    'route-abandoned',
+    'route-unsafe',
+    'route-escape-casing',
+    'route-escape',
+    'inis-elipsi-line',
+    'hirise-frame-line',
+    'hirise-frame-glow',
+  ]);
   const layers = (obj.katmanlar as unknown[]).map((item, idx): LayerDef => {
     if (!isRecord(item)) throw new Error(`katmanlar.json: layer #${idx} is not an object`);
     const id = typeof item.id === 'string' ? item.id.trim() : '';
@@ -231,8 +293,13 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
       varsayilan_saydamlik = saydamlikRaw > 1 ? saydamlikRaw / 100 : saydamlikRaw;
     }
 
+    const alanRaw = typeof item.alan === 'string' ? item.alan.trim().toLowerCase() : '';
+    const alan: LayerArea | undefined =
+      alanRaw === 'kure' || alanRaw === 'ctx' || alanRaw === 'hirise' ? alanRaw : undefined;
+
     return {
       id,
+      alan,
       ad_en: typeof item.ad_en === 'string' && item.ad_en ? item.ad_en : id,
       tur: typeof item.tur === 'string' ? item.tur : '',
       dosya,
@@ -246,6 +313,7 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
       varsayilan_acik,
       varsayilan_saydamlik,
       kaynak: typeof item.kaynak === 'string' ? item.kaynak : '',
+      lisans: typeof item.lisans === 'string' && item.lisans.trim() ? item.lisans.trim() : undefined,
       cozunurluk_m: typeof item.cozunurluk_m === 'number' ? item.cozunurluk_m : NaN,
       guven_notu_en: typeof item.guven_notu_en === 'string' ? item.guven_notu_en : '',
       lejant,
@@ -255,9 +323,9 @@ export async function loadLayerCatalog(): Promise<LayerCatalog> {
   return { synthetic: obj.sahte === true, siteName, layers };
 }
 
-export async function loadGridMeta(): Promise<GridMeta> {
-  const raw = await fetchJson(GRID_URL);
-  if (!isRecord(raw)) throw new Error('izgara.json must be a JSON object');
+export async function loadGridMeta(url: string = GRID_URL): Promise<GridMeta> {
+  const raw = await fetchJson(url);
+  if (!isRecord(raw)) throw new Error(`${url} must be a JSON object`);
   for (const key of ['genislik', 'yukseklik'] as const) {
     const v = raw[key];
     if (!(typeof v === 'number' && Number.isInteger(v) && v > 0)) {
@@ -375,6 +443,14 @@ export async function loadGridMeta(): Promise<GridMeta> {
   };
 }
 
+export async function loadOptionalGridMeta(url: string): Promise<GridMeta | null> {
+  try {
+    return await loadGridMeta(url);
+  } catch {
+    return null;
+  }
+}
+
 export const layerImageUrl = (layer: LayerDef): string => new URL(`${DATA_DIR}/${layer.dosya}`, document.baseURI).href;
 
 /**
@@ -415,12 +491,35 @@ export interface EnergyProfile {
   rezerv_orani: number;
 }
 
+export interface GroundMobilityModel {
+  /** Thermal inertia below which fine dust is considered hazardous (J m^-2 K^-1 s^-1/2). */
+  tiDustThreshold: number;
+  /** Thermal inertia below which ground is classed as loose fine regolith (caution band). */
+  tiLooseThreshold: number;
+  /** Thermal inertia split for soft unconsolidated sand inside the <350 caution band. */
+  tiVeryLooseThreshold: number;
+  /** Assumed speed multiplier on loose regolith (200 <= TI < 350). */
+  looseSpeedFactor: number;
+  /** Assumed speed multiplier on very loose sand / eolian bedforms (TI < 200). */
+  veryLooseSpeedFactor: number;
+  /** Baseline firm-rock rolling resistance coefficient (c_rr). */
+  hardRollingResistance: number;
+  /** Assumed rolling resistance coefficient on loose regolith. */
+  looseRollingResistance: number;
+  /** Assumed rolling resistance coefficient on soft sand / eolian bedforms. */
+  veryLooseRollingResistance: number;
+  kaynaklar: Record<string, string>;
+  guvenler: Record<string, ConfidenceLevel>;
+}
+
 export interface Traverser {
   id: string;
   ad_en: string;
   aciklama_en?: string;
   azami_egim_derece: number;
   hiz_tablosu: SpeedEntry[];
+  /** Optional downhill speed lookup table (symmetric fallback to hiz_tablosu when omitted). */
+  inis_hiz_tablosu?: SpeedEntry[];
   /** Optional: slope from which the route counts as "close to the limit". */
   uyari_egim_derece?: number;
   azami_engel_m?: number;
@@ -437,6 +536,16 @@ export interface Traverser {
   yuruyus_donus?: boolean;
   /** Optional straight-line radial standoff cap from base/landing (metres). */
   uzaklik_tavani_m?: number;
+  /** Optional single-stint (1 EVA or 1 sol) distance budget in metres from sefer_butcesi. */
+  sefer_mesafe_m?: number;
+  /** Optional measured average drive per driving sol in metres (e.g. Perseverance 83.1 m). */
+  surus_gunu_ortalamasi_m?: number;
+  /** Optional measured average drive across all mission sols (e.g. Perseverance 22.9 m). */
+  sol_basina_ortalama_m?: number;
+  /** Optional total cumulative lifetime/campaign range cap in metres (e.g. rover odometer cap). */
+  toplam_menzil_m?: number;
+  /** Optional number of EVAs per day (e.g. 1 EVA/day). */
+  gunde_eva_sayisi?: number;
   /** Optional post-hoc vehicle energy profile (evaluated on drawn route without altering A* search). */
   enerji_profili?: EnergyProfile;
   enerji_katsayisi?: number;
@@ -449,6 +558,7 @@ export interface LandingCraftParams {
   azami_kaya_m?: number;
   azami_yukseklik_m?: number;
   guvenli_alan_capi_m?: number;
+  puskurtme_guvenlik_yaricapi_m?: number;
   kaynaklar: Record<string, string>;
   guvenler: Record<string, ConfidenceLevel>;
 }
@@ -457,6 +567,9 @@ export interface MobilityParams {
   synthetic: boolean;
   traversers: Traverser[];
   landingCraft: LandingCraftParams | null;
+  landingCraftCrewed: LandingCraftParams | null;
+  landingCraftRobotic: LandingCraftParams | null;
+  ground: GroundMobilityModel | null;
 }
 
 const TRAVERSER_LABELS_EN: Record<string, { name: string; note?: string }> = {
@@ -467,7 +580,20 @@ const TRAVERSER_LABELS_EN: Record<string, { name: string; note?: string }> = {
   loaded_astronaut: { name: 'Astronaut carrying load' },
 };
 
-const RESERVED_MOBILITY_KEYS = new Set(['sahte', 'not_en', 'aciklama_en', 'gezginler', 'inis_araci', 'kaynaklar']);
+const RESERVED_MOBILITY_KEYS = new Set([
+  'sahte',
+  'not',
+  'not_en',
+  'aciklama_en',
+  'gezginler',
+  'inis_araci',
+  'inis_araci_insanli',
+  'inis_araci_robotik',
+  'sefer_butcesi',
+  'zemin',
+  'zemin_etkisi',
+  'kaynaklar',
+]);
 
 interface Unwrapped<T> {
   value: T | undefined;
@@ -586,6 +712,14 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
   if (speedParsed.kaynak) kaynaklar.hiz_tablosu = speedParsed.kaynak;
   if (speedParsed.guven) guvenler.hiz_tablosu = speedParsed.guven;
 
+  let inis_hiz_tablosu: SpeedEntry[] | undefined;
+  if ('inis_hiz_tablosu' in raw && raw.inis_hiz_tablosu !== undefined) {
+    const downParsed = parseSpeedTable(raw.inis_hiz_tablosu, `${where} (inis_hiz_tablosu)`);
+    inis_hiz_tablosu = downParsed.entries;
+    if (downParsed.kaynak) kaynaklar.inis_hiz_tablosu = downParsed.kaynak;
+    if (downParsed.guven) guvenler.inis_hiz_tablosu = downParsed.guven;
+  }
+
   const uyariRaw = readNum('uyari_egim_derece');
   const engelRaw = readNum('azami_engel_m', ['azami_kaya_m']);
   const sureRaw = readNum('azami_sure_saat');
@@ -602,6 +736,11 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
       if (guvenler.uzaklik_tavani_km && !guvenler.uzaklik_tavani_m) guvenler.uzaklik_tavani_m = guvenler.uzaklik_tavani_km;
     }
   }
+  const seferMesafeRaw = readNum('sefer_mesafe_m');
+  const surusGunuOrtRaw = readNum('surus_gunu_ortalamasi_m');
+  const solBasinaOrtRaw = readNum('sol_basina_ortalama_m');
+  const toplamMenzilRaw = readNum('toplam_menzil_m');
+  const gundeEvaRaw = readNum('gunde_eva_sayisi');
   const enerjiRaw = readNum('enerji_katsayisi');
 
   let enerji_profili: EnergyProfile | undefined;
@@ -649,6 +788,7 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
     aciklama_en,
     azami_egim_derece,
     hiz_tablosu: speedParsed.entries,
+    inis_hiz_tablosu,
     uyari_egim_derece: isPositive(uyariRaw) && uyariRaw < azami_egim_derece ? uyariRaw : undefined,
     azami_engel_m: isPositive(engelRaw) ? engelRaw : undefined,
     azami_sure_saat: isPositive(sureRaw) ? sureRaw : undefined,
@@ -658,6 +798,11 @@ function parseTraverser(idFallback: string, raw: Record<string, unknown>): Trave
     yasam_destek_saat: isPositive(yasamRaw) ? yasamRaw : undefined,
     yuruyus_donus,
     uzaklik_tavani_m: isPositive(uzaklikM) ? uzaklikM : undefined,
+    sefer_mesafe_m: isPositive(seferMesafeRaw) ? seferMesafeRaw : undefined,
+    surus_gunu_ortalamasi_m: isPositive(surusGunuOrtRaw) ? surusGunuOrtRaw : undefined,
+    sol_basina_ortalama_m: isPositive(solBasinaOrtRaw) ? solBasinaOrtRaw : undefined,
+    toplam_menzil_m: isPositive(toplamMenzilRaw) ? toplamMenzilRaw : undefined,
+    gunde_eva_sayisi: isPositive(gundeEvaRaw) ? gundeEvaRaw : undefined,
     enerji_profili,
     enerji_katsayisi: isPositive(enerjiRaw) ? enerjiRaw : undefined,
     kaynaklar,
@@ -682,36 +827,161 @@ function parseLandingCraft(raw: unknown): LandingCraftParams | null {
   const azami_kaya_m = readOpt('azami_kaya_m');
   const azami_yukseklik_m = readOpt('azami_yukseklik_m');
   const capi = readOpt('guvenli_alan_capi_m');
+  const plumeR = readOpt('puskurtme_guvenlik_yaricapi_m');
 
   return {
     azami_egim_derece: isPositive(azami_egim_derece) ? azami_egim_derece : undefined,
     azami_kaya_m: isPositive(azami_kaya_m) ? azami_kaya_m : undefined,
     azami_yukseklik_m,
     guvenli_alan_capi_m: isPositive(capi) ? capi : undefined,
+    puskurtme_guvenlik_yaricapi_m: isPositive(plumeR) ? plumeR : undefined,
     kaynaklar,
     guvenler,
   };
 }
 
-/**
- * Supports both:
- *   1) Dictionary schema (team mobility contract): { yuruyen_insan: {...}, roverli_insan: {...}, rover: {...}, inis_araci: {...} }
- *      with { deger, kaynak, guven } parameter objects, and
- *   2) Legacy list schema: { gezginler: [...] } or a bare [...] array.
- */
-export async function loadMobility(): Promise<MobilityParams> {
-  const raw = await fetchJson(MOBILITY_URL);
+function applyCagataySupplement(
+  rawSup: unknown,
+  traversers: Traverser[],
+  crewedLander: LandingCraftParams | null,
+  roboticLander: LandingCraftParams | null,
+): { crewedLander: LandingCraftParams | null; roboticLander: LandingCraftParams | null } {
+  if (!isRecord(rawSup)) return { crewedLander, roboticLander };
+  const parsedCrewed = parseLandingCraft(rawSup.inis_araci_insanli);
+  const parsedRobotic = parseLandingCraft(rawSup.inis_araci_robotik);
+  const nextCrewed = parsedCrewed ?? crewedLander;
+  const nextRobotic = parsedRobotic ?? roboticLander;
+
+  const budgets = isRecord(rawSup.sefer_butcesi) ? rawSup.sefer_butcesi : null;
+  if (budgets) {
+    type MergeNumKey =
+      | 'sefer_mesafe_m'
+      | 'surus_gunu_ortalamasi_m'
+      | 'sol_basina_ortalama_m'
+      | 'uzaklik_tavani_m'
+      | 'toplam_menzil_m'
+      | 'azami_sure_saat'
+      | 'azami_egim_derece'
+      | 'uyari_egim_derece'
+      | 'gunde_eva_sayisi';
+
+    const mergeNum = (
+      t: Traverser,
+      srcBlock: unknown,
+      srcKey: string,
+      dstKey: MergeNumKey,
+    ) => {
+      if (!isRecord(srcBlock) || !(srcKey in srcBlock)) return;
+      const u = unwrapField(srcBlock[srcKey]);
+      if (isPositive(u.value)) {
+        t[dstKey] = u.value;
+        if (u.kaynak) t.kaynaklar[dstKey] = u.kaynak;
+        if (u.guven) t.guvenler[dstKey] = u.guven;
+      }
+    };
+
+    const y = traversers.find((t) => t.id === 'yuruyen_insan' || t.id === 'suited_astronaut');
+    if (y && isRecord(budgets.yuruyen_insan)) {
+      mergeNum(y, budgets.yuruyen_insan, 'gidis_donus_azami_m', 'sefer_mesafe_m');
+      mergeNum(y, budgets.yuruyen_insan, 'planlama_suresi_saat', 'azami_sure_saat');
+      mergeNum(y, budgets.yuruyen_insan, 'geri_yurume_azami_m', 'uzaklik_tavani_m');
+      mergeNum(y, budgets.yuruyen_insan, 'gunde_eva_sayisi', 'gunde_eva_sayisi');
+      mergeNum(y, budgets.yuruyen_insan, 'azami_egim_derece', 'azami_egim_derece');
+      mergeNum(y, budgets.yuruyen_insan, 'dikkat_egim_derece', 'uyari_egim_derece');
+    }
+
+    const rCrew = traversers.find((t) => t.id === 'roverli_insan');
+    if (rCrew && isRecord(budgets.aracli_insan)) {
+      mergeNum(rCrew, budgets.aracli_insan, 'gunluk_menzil_m', 'sefer_mesafe_m');
+      mergeNum(rCrew, budgets.aracli_insan, 'geri_yurume_azami_m', 'uzaklik_tavani_m');
+      mergeNum(rCrew, budgets.aracli_insan, 'azami_egim_derece', 'azami_egim_derece');
+      mergeNum(rCrew, budgets.aracli_insan, 'dikkat_egim_derece', 'uyari_egim_derece');
+    }
+
+    const rBot = traversers.find((t) => t.id === 'rover');
+    if (rBot && isRecord(budgets.rover)) {
+      mergeNum(rBot, budgets.rover, 'sol_basina_en_yuksek_m', 'sefer_mesafe_m');
+      mergeNum(rBot, budgets.rover, 'surus_gunu_ortalamasi_m', 'surus_gunu_ortalamasi_m');
+      mergeNum(rBot, budgets.rover, 'sol_basina_ortalama_m', 'sol_basina_ortalama_m');
+      mergeNum(rBot, budgets.rover, 'toplam_menzil_m', 'toplam_menzil_m');
+      mergeNum(rBot, budgets.rover, 'azami_egim_derece', 'azami_egim_derece');
+      mergeNum(rBot, budgets.rover, 'dikkat_egim_derece', 'uyari_egim_derece');
+    }
+
+    // Keep caution threshold below max slope and extend speed table tail if max slope rose
+    for (const t of traversers) {
+      if (t.uyari_egim_derece !== undefined && t.uyari_egim_derece >= t.azami_egim_derece) {
+        t.uyari_egim_derece = undefined;
+      }
+      for (const tbl of [t.hiz_tablosu, t.inis_hiz_tablosu]) {
+        if (!tbl || tbl.length === 0) continue;
+        const last = tbl[tbl.length - 1];
+        if (t.azami_egim_derece > last.egim_derece) {
+          const fallbackSpeed = [...tbl].reverse().find((e) => e.hiz_m_s > 0)?.hiz_m_s ?? 0.01;
+          tbl.push({
+            egim_derece: t.azami_egim_derece,
+            hiz_m_s: last.hiz_m_s > 0 ? last.hiz_m_s : fallbackSpeed,
+          });
+        }
+      }
+    }
+  }
+
+  return { crewedLander: nextCrewed, roboticLander: nextRobotic };
+}
+
+function parseGroundMobilityModel(rawMain: Record<string, unknown>, rawSup: unknown): GroundMobilityModel | null {
+  const zeminSup = isRecord(rawSup) && isRecord(rawSup.zemin) ? rawSup.zemin : null;
+  const effectMain = isRecord(rawMain.zemin_etkisi) ? rawMain.zemin_etkisi : null;
+  if (!zeminSup && !effectMain) return null;
+
+  const kaynaklar: Record<string, string> = {};
+  const guvenler: Record<string, ConfidenceLevel> = {};
+  const readG = (src: Record<string, unknown> | null, key: string, dstKey: string, fallback: number): number => {
+    if (!src || !(key in src)) return fallback;
+    const u = unwrapField(src[key]);
+    if (u.kaynak) kaynaklar[dstKey] = u.kaynak;
+    if (u.guven) guvenler[dstKey] = u.guven;
+    return typeof u.value === 'number' && Number.isFinite(u.value) ? u.value : fallback;
+  };
+
+  return {
+    tiDustThreshold: readG(zeminSup, 'toz_esigi_termal_atalet', 'toz_esigi_termal_atalet', 100),
+    tiLooseThreshold: readG(zeminSup, 'gevsek_zemin_dikkat_termal_atalet', 'gevsek_zemin_dikkat_termal_atalet', 350),
+    tiVeryLooseThreshold: readG(effectMain, 'cok_gevsek_termal_atalet', 'cok_gevsek_termal_atalet', 200),
+    looseSpeedFactor: readG(effectMain, 'gevsek_hiz_carpani', 'gevsek_hiz_carpani', 0.85),
+    veryLooseSpeedFactor: readG(effectMain, 'cok_gevsek_hiz_carpani', 'cok_gevsek_hiz_carpani', 0.7),
+    hardRollingResistance: 0.05,
+    looseRollingResistance: readG(effectMain, 'gevsek_yuvarlanma_direnci', 'gevsek_yuvarlanma_direnci', 0.08),
+    veryLooseRollingResistance: readG(effectMain, 'cok_gevsek_yuvarlanma_direnci', 'cok_gevsek_yuvarlanma_direnci', 0.12),
+    kaynaklar,
+    guvenler,
+  };
+}
+
+/** Parses already-fetched mobility JSON payloads (exported for deterministic unit testing). */
+export function parseMobilityParams(raw: unknown, sup: unknown = null): MobilityParams {
   if (Array.isArray(raw)) {
     if (raw.length === 0) throw new Error('mobilite_parametreleri.json contains no traversers');
     const traversers = raw.map((item, i) => {
       if (!isRecord(item)) throw new Error(`mobilite_parametreleri.json: traverser #${i} is not an object`);
       return parseTraverser(`traverser_${i + 1}`, item);
     });
-    return { synthetic: false, traversers, landingCraft: null };
+    const landers = applyCagataySupplement(sup, traversers, null, null);
+    return {
+      synthetic: false,
+      traversers,
+      landingCraft: landers.crewedLander,
+      landingCraftCrewed: landers.crewedLander,
+      landingCraftRobotic: landers.roboticLander,
+      ground: null,
+    };
   }
 
   if (!isRecord(raw)) throw new Error('mobilite_parametreleri.json must be an object or array');
-  const landingCraft = parseLandingCraft(raw.inis_araci);
+  const baseLander = parseLandingCraft(raw.inis_araci);
+  let landingCraftCrewed = parseLandingCraft(raw.inis_araci_insanli) ?? baseLander;
+  let landingCraftRobotic = parseLandingCraft(raw.inis_araci_robotik);
   let traversers: Traverser[] = [];
 
   if (Array.isArray(raw.gezginler)) {
@@ -724,7 +994,8 @@ export async function loadMobility(): Promise<MobilityParams> {
       if (isRecord(val)) traversers.push(parseTraverser(key, val));
     }
   } else {
-    // Top-level dictionary: yuruyen_insan, roverli_insan, rover (or any traverser block with azami_egim_derece & hiz_tablosu)
+    // Top-level dictionary: only parse objects defining "hiz_tablosu" so non-traverser blocks
+    // like landers (inis_araci_insanli) are never misclassified as traversers.
     const preferredOrder = ['yuruyen_insan', 'roverli_insan', 'rover'];
     const keys = [
       ...preferredOrder.filter((k) => k in raw),
@@ -732,7 +1003,7 @@ export async function loadMobility(): Promise<MobilityParams> {
     ];
     for (const key of keys) {
       const val = raw[key];
-      if (isRecord(val) && ('hiz_tablosu' in val || 'azami_egim_derece' in val)) {
+      if (isRecord(val) && 'hiz_tablosu' in val) {
         traversers.push(parseTraverser(key, val));
       }
     }
@@ -741,7 +1012,35 @@ export async function loadMobility(): Promise<MobilityParams> {
   if (traversers.length === 0) {
     throw new Error('mobilite_parametreleri.json contains no traversers');
   }
-  return { synthetic: raw.sahte === true, traversers, landingCraft };
+  const merged = applyCagataySupplement(sup, traversers, landingCraftCrewed, landingCraftRobotic);
+  landingCraftCrewed = merged.crewedLander;
+  landingCraftRobotic = merged.roboticLander;
+
+  return {
+    synthetic: raw.sahte === true,
+    traversers,
+    landingCraft: landingCraftCrewed ?? baseLander,
+    landingCraftCrewed,
+    landingCraftRobotic,
+    ground: parseGroundMobilityModel(raw, sup),
+  };
+}
+
+/**
+ * Supports both:
+ *   1) Dictionary schema (team mobility contract): { yuruyen_insan: {...}, roverli_insan: {...}, rover: {...}, inis_araci: {...} }
+ *      with { deger, kaynak, guven } parameter objects, and
+ *   2) Legacy list schema: { gezginler: [...] } or a bare [...] array.
+ */
+export async function loadMobility(): Promise<MobilityParams> {
+  const raw = await fetchJson(MOBILITY_URL);
+  let sup: unknown = null;
+  try {
+    sup = await fetchJson(CAGATAY_MOBILITY_URL);
+  } catch {
+    sup = null;
+  }
+  return parseMobilityParams(raw, sup);
 }
 
 // ------------------------------------------------------------ science stops
@@ -797,3 +1096,55 @@ export async function loadStops(): Promise<StopsCatalog> {
     }));
   return { synthetic, stops };
 }
+
+export interface SimpleGeoJsonFeature {
+  type: 'Feature';
+  properties: Record<string, unknown> | null;
+  geometry: {
+    type: string;
+    coordinates: unknown;
+  };
+}
+
+export interface SimpleGeoJsonCollection {
+  type: 'FeatureCollection';
+  features: SimpleGeoJsonFeature[];
+}
+
+export async function loadOptionalGeoJson(url: string): Promise<SimpleGeoJsonCollection | null> {
+  try {
+    const raw = await fetchJson(url);
+    if (isRecord(raw) && raw.type === 'FeatureCollection' && Array.isArray(raw.features)) {
+      return raw as unknown as SimpleGeoJsonCollection;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export interface GlobeContextMeta {
+  kure: Record<string, unknown> | null;
+  radyasyon: Record<string, unknown> | null;
+  tozFirtinasi: Record<string, unknown> | null;
+}
+
+async function fetchOptionalJsonRecord(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await fetchJson(url);
+    return isRecord(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Loads optional v5 global Mars context metadata JSONs (`kure.json`, `radyasyon.json`, `toz_firtinasi.json`). */
+export async function loadOptionalKureMeta(): Promise<GlobeContextMeta> {
+  const [kure, radyasyon, tozFirtinasi] = await Promise.all([
+    fetchOptionalJsonRecord(KURE_META_URL),
+    fetchOptionalJsonRecord(KURE_RADIATION_URL),
+    fetchOptionalJsonRecord(KURE_DUST_URL),
+  ]);
+  return { kure, radyasyon, tozFirtinasi };
+}
+

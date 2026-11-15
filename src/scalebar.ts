@@ -17,14 +17,22 @@ function niceLength(maxMetres: number): number {
   return best;
 }
 
-export function attachScaleBar(map: MlMap, grid: GridMeta, root: HTMLElement): void {
+export interface ScaleBarController {
+  setGrid(nextGrid: GridMeta): void;
+  setVisible(visible: boolean): void;
+}
+
+export function attachScaleBar(map: MlMap, grid: GridMeta, root: HTMLElement): ScaleBarController {
   const line = root.querySelector<HTMLElement>('.scalebar-line')!;
   const label = root.querySelector<HTMLElement>('.scalebar-label')!;
-  const widthMetres = grid.genislik * grid.hucre_m;
+  let activeGrid = grid;
+  let visible = true;
 
   const update = () => {
-    const nw = map.project(grid.koseler[0]);
-    const ne = map.project(grid.koseler[1]);
+    if (!visible) return;
+    const widthMetres = activeGrid.genislik * activeGrid.hucre_m;
+    const nw = map.project(activeGrid.koseler[0]);
+    const ne = map.project(activeGrid.koseler[1]);
     const widthPx = Math.hypot(ne.x - nw.x, ne.y - nw.y);
     if (!(widthPx > 0)) return;
     const metresPerPx = widthMetres / widthPx;
@@ -36,4 +44,16 @@ export function attachScaleBar(map: MlMap, grid: GridMeta, root: HTMLElement): v
   map.on('move', update);
   map.on('resize', update);
   update();
+
+  return {
+    setGrid(nextGrid) {
+      activeGrid = nextGrid;
+      update();
+    },
+    setVisible(nextVisible) {
+      visible = nextVisible;
+      root.style.display = visible ? '' : 'none';
+      if (visible) update();
+    },
+  };
 }

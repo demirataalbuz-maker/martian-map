@@ -1,0 +1,40 @@
+{
+ "tip": "uint8",
+ "veri_yok": 255,
+ "inis_siniflar_en": {
+  "0": "Landable: max slope in the safe circle <= 10 deg",
+  "1": "Marginal: max slope <= 15 deg, or sand in circle",
+  "2": "Not landable"
+ },
+ "tehlike_siniflar_en": {
+  "0": "No known non-slope hazard (slope is handled separately)",
+  "1": "Caution: eolian sand ripples/dunes (USGS SIM 3464 unit Aeb) or low thermal inertia (loose fine-grained ground)"
+ },
+ "guvenli_alan_capi_m": {
+  "deger": 100,
+  "kaynak": "NASA presentation p. 16 (verified by Yigit)",
+  "guven": "tasarim_degeri"
+ },
+ "azami_egim_derece": {
+  "deger": 15,
+  "kaynak": "HLS2 supplemental paper planning table (from MSL), https://www.hou.usra.edu/meetings/explorationzone2015/program_presenter_info/Supplemental%20_Paper.pdf",
+  "guven": "tasarim_degeri"
+ },
+ "sinir_alt_egim_derece": {
+  "deger": 10,
+  "kaynak": "NASA HLS2 2015 announcement, https://www.nasa.gov/wp-content/uploads/2015/06/hls2-2nd-announcement-7-8.pdf",
+  "guven": "tasarim_degeri"
+ },
+ "egim_taban_uzunlugu_m": 40.0,
+ "notlar_en": [
+  "Eolian bedform unit (USGS SIM 3464) inside the circle makes a site at best marginal; geology covers only part of the box.",
+  "Thick dust test (thermal inertia < 100 and albedo > 0.25, MSL engineering guide) applied; 0 cells failed.",
+  "Slopes come from a 40 m baseline on CTX elevation with ~75-80 m effective resolution; landing-scale (lander footprint) slopes and rocks are not resolved."
+ ],
+ "dagilim": {
+  "inilebilir": 17845635,
+  "sinirda": 3455450,
+  "inilemez": 1742636,
+  "veri_yok": 89207
+ }
+}

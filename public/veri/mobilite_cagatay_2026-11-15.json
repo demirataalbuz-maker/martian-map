@@ -1,0 +1,212 @@
+{
+ "not": "Cagatay, 15 Kasim 2026 (sohbetten aktarildi). Degerler arama alintilarindan; baglantilar acilip dogrulanmadi. 'Ay' yazan degerler Ay icin tanimli.",
+ "inis_araci_robotik": {
+  "azami_egim_derece": {
+   "deger": 30,
+   "taban_uzunlugu_m": "2-5",
+   "kaynak": "Golombek et al. 2012, Selection of the MSL Landing Site, https://link.springer.com/article/10.1007/s11214-012-9916-y; verified in abstract: slopes <30 deg at 2-5 m",
+   "guven": "tasarim_degeri"
+  },
+  "azami_egim_genis_olcek_derece": {
+   "deger": 15,
+   "taban_uzunlugu_m": 20,
+   "kaynak": "MSL 2006 pre-design study (radar altimeter), lpi.usra.edu",
+   "guven": "tasarim_degeri"
+  },
+  "azami_kaya_m": {
+   "deger": 0.6,
+   "kaynak": "https://www.hou.usra.edu/meetings/lpsc2015/pdf/1653.pdf (Golombek et al. 2015, LPSC 46, #1653; verified 2026-11-15): rock taller than 0.6 m",
+   "guven": "tasarim_degeri"
+  },
+  "inis_elipsi_km": {
+   "deger": "7.7 x 6.6",
+   "kaynak": "NASA, Perseverance Rover Landing Ellipse in Jezero Crater, https://mars.nasa.gov/resources/25491/perseverance-rover-landing-ellipse-in-jezero-crater/",
+   "guven": "tasarim_degeri"
+  },
+  "inis_hassasiyeti_m": {
+   "deger": 5,
+   "kaynak": "Perseverance lander vision system paper, https://arc.aiaa.org/doi/10.2514/1.G006780 (paywalled, NOT verified)",
+   "guven": "olculmus"
+  },
+  "guvenli_alan_capi_m": {
+   "deger": 200,
+   "kaynak": "Mars 2020 landing constraints (TRN: safe area radius > 100 m), https://marsnext.jpl.nasa.gov/scieng_eng.cfm (marsnext page unreachable 2026-11-15, NOT verified)",
+   "guven": "VARSAYIM"
+  },
+  "azami_yukseklik_m": {
+   "deger": 500,
+   "kaynak": "https://www.hou.usra.edu/meetings/lpsc2015/pdf/1653.pdf (Golombek et al. 2015, LPSC 46, #1653; verified 2026-11-15): below +0.5 km MOLA",
+   "guven": "tasarim_degeri"
+  },
+  "enlem_siniri_derece": {
+   "deger": 30,
+   "kaynak": "Golombek et al. 2012 abstract (+-30 deg, verified); https://www.hou.usra.edu/meetings/lpsc2015/pdf/1653.pdf (Golombek et al. 2015, LPSC 46, #1653; verified 2026-11-15)",
+   "guven": "tasarim_degeri"
+  }
+ },
+ "inis_araci_insanli": {
+  "azami_egim_derece": {
+   "deger": 10,
+   "taban_uzunlugu_m": "not stated",
+   "kaynak": "NASA HLS2 2015 announcement, https://www.nasa.gov/wp-content/uploads/2015/06/hls2-2nd-announcement-7-8.pdf",
+   "guven": "tasarim_degeri"
+  },
+  "azami_egim_genis_olcek_derece": {
+   "deger": 15,
+   "taban_uzunlugu_m": 20,
+   "kaynak": "HLS2 supplemental paper planning table (from MSL), https://www.hou.usra.edu/meetings/explorationzone2015/program_presenter_info/Supplemental%20_Paper.pdf",
+   "guven": "tasarim_degeri"
+  },
+  "azami_kaya_m": {
+   "deger": 0.55,
+   "kaynak": "no crewed source; robotic value used as placeholder",
+   "guven": "VARSAYIM"
+  },
+  "inis_hassasiyeti_m": {
+   "deger": 100,
+   "kaynak": "HLS2 supplemental paper (target circle)",
+   "guven": "tasarim_degeri"
+  },
+  "guvenli_alan_capi_m": {
+   "deger": 100,
+   "kaynak": "NASA presentation p. 16 (verified by Yigit)",
+   "guven": "tasarim_degeri"
+  },
+  "puskurtme_guvenlik_yaricapi_m": {
+   "deger": 1000,
+   "kaynak": "same presentation; Metzger, https://arxiv.org/pdf/2104.06248v1",
+   "guven": "tasarim_degeri"
+  },
+  "azami_yukseklik_m": {
+   "deger": 2000,
+   "kaynak": "NASA HLS2 2015 announcement",
+   "guven": "tasarim_degeri"
+  },
+  "enlem_siniri_derece": {
+   "deger": 50,
+   "kaynak": "NASA HLS2 2015 announcement",
+   "guven": "tasarim_degeri"
+  }
+ },
+ "zemin": {
+  "toz_esigi_termal_atalet": {
+   "deger": 100,
+   "kaynak": "https://www.hou.usra.edu/meetings/lpsc2015/pdf/1653.pdf (Golombek et al. 2015, LPSC 46, #1653; verified 2026-11-15): thermal inertia >100 and albedo <0.25 (verified)",
+   "guven": "tasarim_degeri"
+  },
+  "toz_esigi_albedo": {
+   "deger": 0.25,
+   "kaynak": "https://www.hou.usra.edu/meetings/lpsc2015/pdf/1653.pdf",
+   "guven": "tasarim_degeri"
+  },
+  "gevsek_zemin_dikkat_termal_atalet": {
+   "deger": 350,
+   "kaynak": "https://arxiv.org/pdf/2109.05711",
+   "guven": "olceklenmis"
+  }
+ },
+ "sefer_butcesi": {
+  "yuruyen_insan": {
+   "azami_sure_saat": {
+    "deger": 8,
+    "kaynak": "NASA xEVA System ConOps EVA-EXP-0042 Rev B",
+    "guven": "tasarim_degeri (Ay)"
+   },
+   "planlama_suresi_saat": {
+    "deger": 6.4,
+    "kaynak": "8 h x 0.80 reserve",
+    "guven": "VARSAYIM"
+   },
+   "yurume_hizi_km_saat": {
+    "deger": 2,
+    "kaynak": "NASA EHP Integrated ConOps Rev B, https://ntrs.nasa.gov/citations/20240011450",
+    "guven": "tasarim_degeri (Ay)"
+   },
+   "gidis_donus_azami_m": {
+    "deger": 12800,
+    "kaynak": "6.4 h x 2 km/h, flat, no stops",
+    "guven": "olceklenmis"
+   },
+   "geri_yurume_azami_m": {
+    "deger": 10000,
+    "kaynak": "NASA EHP Integrated ConOps Rev B (NTRS page text did not show the number; NOT verified)",
+    "guven": "tasarim_degeri (Ay)"
+   },
+   "gunde_eva_sayisi": {
+    "deger": 1,
+    "kaynak": "derived from xEVA ConOps (24 h per person per week)",
+    "guven": "olceklenmis"
+   },
+   "azami_egim_derece": {
+    "deger": 20,
+    "kaynak": "NASA xEVA System ConOps",
+    "guven": "tasarim_degeri (Ay)"
+   },
+   "dikkat_egim_derece": {
+    "deger": 15,
+    "kaynak": "Apollo 15 steepest walked slope, https://www.sciencedirect.com/science/article/pii/S0094576524003746; xEVA ConOps notes Apollo 15 traversed slopes of ~17 deg",
+    "guven": "olculmus (Ay)"
+   }
+  },
+  "aracli_insan": {
+   "gunluk_menzil_m": {
+    "deger": 17000,
+    "kaynak": "demo vehicle profile: 3000 Wh usable, 300 W auxiliary, 6 h, firm ground",
+    "guven": "VARSAYIM"
+   },
+   "apollo_tek_surus_en_uzun_m": {
+    "deger": 20100,
+    "kaynak": "NASA NSSDC, https://nssdc.gsfc.nasa.gov/planetary/lunar/apollo_lrv.html",
+    "guven": "olculmus (Ay)"
+   },
+   "geri_yurume_azami_m": {
+    "deger": 10000,
+    "kaynak": "NASA EHP Integrated ConOps Rev B",
+    "guven": "tasarim_degeri (Ay)"
+   },
+   "azami_egim_derece": {
+    "deger": 20,
+    "kaynak": "NASA xEVA System ConOps EVA-EXP-0042 Rev B: rovers handle local slopes up to 20 deg and rocks up to 30 cm (ISECG 2018); verified 2026-11-15",
+    "guven": "tasarim_degeri (Ay)"
+   }
+  },
+  "rover": {
+   "sol_basina_en_yuksek_m": {
+    "deger": 412,
+    "kaynak": "NASA Perseverance blog, 12 Oct 2026, https://science.nasa.gov/blogs/perseverance-mars-rover/2026/10/12/nasas-perseverance-sets-off-world-record-for-total-distance-driven/",
+    "guven": "olculmus"
+   },
+   "sol_basina_ortalama_m": {
+    "deger": 22.9,
+    "kaynak": "Same traverse: 46.05 km over 2009 sols incl. non-driving sols",
+    "guven": "olculmus"
+   },
+   "toplam_menzil_m": {
+    "deger": 45220,
+    "kaynak": "same NASA post",
+    "guven": "olculmus"
+   },
+   "azami_hiz_m_s": {
+    "deger": 0.042,
+    "kaynak": "NASA Perseverance rover components, https://science.nasa.gov/mission/mars-2020-perseverance/rover-components/",
+    "guven": "tasarim_degeri"
+   },
+   "azami_egim_derece": {
+    "deger": 30,
+    "kaynak": "MSL instrument host document (drive software limit)",
+    "guven": "tasarim_degeri"
+   },
+   "dikkat_egim_derece": {
+    "deger": 20,
+    "kaynak": "based on Perseverance crater-rim climb, JPL news",
+    "guven": "VARSAYIM"
+   },
+   "surus_gunu_ortalamasi_m": {
+    "deger": 83.1,
+    "kaynak": "Our calculation from the NASA MMGIS Perseverance traverse (M20_traverse.json): 554 driving sols, 46.05 km, sols 14-2022; median 46.0 m, p75 135.6 m, p90 212.4 m",
+    "guven": "olculmus"
+   }
+  }
+ },
+ "dogrulama_2026_11_15": "Links opened by script: verified = Golombek 2012 abstract, Steltzner MSL EDL, M2020 ellipse, HLS2 (10 deg, +2 km, +-50, 25 km2), HLS2 supplemental (15 deg at 20 m; 100 m circle), LPSC 2015 Mars 2020 constraints, Metzger ejecta ~1 km, xEVA ConOps (20 deg, 8 h, 24 h/week), ICES step 0.3 m, NSSDC LRV, MSL host 30/50 deg, Perseverance 152 m/h, 412 m/sol, 45.22 km, arXiv 2109.05711 TI<350. Not verified (blocked or text absent): marsnext.jpl.nasa.gov, AIAA 5 m, NTRS EHP 10 km walk-back, NTRS LTV, ScienceDirect Apollo 15, MNRAS, NASA SP-368."
+}

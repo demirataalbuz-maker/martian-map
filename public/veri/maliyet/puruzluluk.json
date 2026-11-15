@@ -1,0 +1,8 @@
+{
+ "tip": "uint8",
+ "olcek_m": 0.1,
+ "veri_yok": 255,
+ "pencere_m": 180,
+ "anlam_en": "Local relief roughness: RMS deviation from the 180 m moving mean of the 20 m CTX elevation, in 0.1 m steps.",
+ "guven_notu_en": "CTX elevation resolves features of about 75-80 m only; boulders and small roughness are invisible at this scale."
+}

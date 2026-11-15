@@ -9,3 +9,14 @@ raw-data/
 
 # Local assistant tooling
 .claude/
+
+# Unused offline intermediate binaries & previews from data package v3 (kept locally, excluded from git push)
+public/veri/maliyet/albedo.bin
+public/veri/maliyet/jeoloji.bin
+public/veri/maliyet/puruzluluk.bin
+public/veri/maliyet/sivri_maske.bin
+public/veri/maliyet/gok_kapali.bin
+public/veri/maliyet/inis.bin
+public/veri/ince/maliyet/puruzluluk.bin
+public/veri/kure/*.bin
+public/veri/kure/*_onizleme*

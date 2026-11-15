@@ -8,9 +8,8 @@ Guide: Martian Map*. Static single-page web app, no backend.
 
 > **Live site:** https://demirataalbuz-maker.github.io/martian-map/ (no login needed)
 >
-> **Status:** all planned features are in place and deployed.
-> The data in `public/veri` is **synthetic** and is
-> labelled as such in the UI.
+> **Status:** all planned features are in place and deployed with **real Mars orbital & terrain datasets (Package v5)**:
+> global `z0–z5` Mars globe (`USGS Viking MDIM 2.1` color mosaic + `MOLA / TES / MDAD` environmental context & landing screening), a `20 m` CTX regional grid (`86 × 107.5 km` around Jezero crater & Nili Planum), and a `5 m` HiRISE fine grid (`~20 × 21 km` Perseverance landing & delta zone).
 
 ## Run it
 
@@ -92,18 +91,19 @@ sources are listed in [REFERENCES.md](REFERENCES.md).
 
 ## Routing model
 
-The route is the least-**time** path on the cost grid (A*, 8-connected, in a Web
-Worker). All numbers come from the data files:
+The route is the least-**time** path on the active scenario's cost grid (A*, 8-connected, in a Web
+Worker: `20 m` CTX grid for the Crewed scenario, `5 m` HiRISE grid for the Robotic Rover scenario). All numbers come from the data files:
 
 - step length = `hucre_m` (orthogonal) or `hucre_m` × √2 (diagonal); step time = length / speed
-- cell speed = the traverser's speed table interpolated at the cell's slope (speed depends on slope magnitude only; uphill and downhill are treated the same)
+- **directed uphill/downhill travel:** elevation differences (`yukseklik.bin`) compute exact signed slope angle per step so uphill vs downhill speeds and energy consumption differ
+- **20 m regolith & slope coupling:** in the `20 m` CTX scenario, cell speed blends slope speed limits with the THEMIS thermal inertia (`termal_atalet.bin`) loose-regolith model (`TI < 200` soft sand/dust slowdowns + rolling resistance scaling); in `5 m` HiRISE, rock abundance/thermal inertia grids are unmodeled and reported as `CAUTION (assumed)`
 - impassable = hazard class 2 (forbidden) or slope above the traverser's limit; diagonal steps never cut a blocked corner
 - "caution" cells are passable at the slowest speed in the traverser's table and trigger a route warning; unmapped ("no data", 255) cells are **not crossed by default** (distinct from "forbidden" 2, with a dedicated message) and can optionally be allowed at slowest speed with a warning via the UI toggle
+- **stop order & battery reserve:** users may keep manual click order or toggle exact branch-and-bound TSP reordering (up to 7 science stops); for crewed rover missions (`roverli_insan`), exceeding the battery reserve triggers `NO-GO (broken: energy)` and marks the depletion point on the map/chart
 - for crewed rover traverses (`roverli_insan` or `yuruyus_donus: true`), a grid Dijkstra walk-back time field from the start / landing cell using the suited walking astronaut speed table checks `elapsed_time(n) + walk_back_time(n) ≤ suit_life_support_limit` at every step along the route, alongside the `10 km` straight-line radial standoff cap from base
 
 ## Model boundaries and limitations
 
-- **Spatial scale:** Computed with 20 m resolution data; obstacles smaller than this scale (boulders `< 0.30 m`, sand ripples, sharp rocks, wheelbase-scale breakovers) were not evaluated.
-- **Missing surface layers:** Quantitative rock abundance and thermal inertia grids are not available in this dataset (assumed firm, rock-free baseline), so routes without `NO-GO` violations are reported as `CAUTION: rock and thermal inertia data not available (assumed)`.
-- **Search simplifications:** A* search uses undirected slope magnitude only (no directed uphill/downhill search; conservative uphill walking speeds are used for walk-back), visits science stops in the exact order chosen by the user (no TSP stop reordering), and omits turn-angle time penalties.
-- **Post-hoc energy:** Vehicle battery energy (`Wh`, labelled as the Mars Rover Demo v1 scenario profile) is evaluated along the already-selected least-time route without altering A* search.
+- **Spatial scale:** `20 m` CTX evaluates regional terrain (`~75–80 m` effective DTM detail; boulders `< 20 m` unresolved); `5 m` HiRISE evaluates central delta & landing terrain (individual rocks `< 1–2 m` unresolved).
+- **Regolith model scope:** `20 m` CTX models loose dust/regolith slowdown and rolling resistance from `100 m` resampled THEMIS thermal inertia (`±20%` uncertainty) + USGS SIM 3464 sand dunes (`Aeb`); quantitative thermal inertia / rock abundance at `5 m` HiRISE resolution is not available (`CAUTION: assumed` baseline).
+- **Remaining physical simplifications:** A* optimizes route geometry for travel time first and checks battery energy / EVA life-support / `10 km` walk-back budgets along the route (no solar charging, diurnal thermal cycling, or dynamic slip transients); exact TSP stop optimization caps at `7` stops (`> 7` keeps user click order); turn-angle time penalties are omitted.

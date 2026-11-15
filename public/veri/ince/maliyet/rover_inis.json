@@ -1,0 +1,51 @@
+{
+ "parametreler": {
+  "inis_azami_egim": {
+   "deger": 30,
+   "kaynak": "Golombek et al. 2012, Selection of the MSL Landing Site, https://link.springer.com/article/10.1007/s11214-012-9916-y",
+   "guven": "tasarim_degeri"
+  },
+  "inis_sinir_egim": {
+   "deger": 15,
+   "kaynak": "MSL 2006 pre-design study (radar altimeter), lpi.usra.edu",
+   "guven": "tasarim_degeri"
+  },
+  "guvenli_alan_capi_m": {
+   "deger": 200,
+   "kaynak": "Mars 2020 landing constraints (TRN: safe area radius > 100 m), https://marsnext.jpl.nasa.gov/scieng_eng.cfm",
+   "guven": "tasarim_degeri"
+  },
+  "rover_azami_egim": {
+   "deger": 30,
+   "kaynak": "MSL instrument host document (drive software limit)",
+   "guven": "tasarim_degeri"
+  },
+  "rover_dikkat_egim": {
+   "deger": 20,
+   "kaynak": "based on Perseverance crater-rim climb, JPL news",
+   "guven": "VARSAYIM"
+  },
+  "puruz_dikkat_m": {
+   "deger": 0.5,
+   "kaynak": "placeholder: RMS relief within 25 m",
+   "guven": "VARSAYIM"
+  }
+ },
+ "inis_siniflar_en": {
+  "0": "Landable",
+  "1": "Marginal",
+  "2": "Not landable"
+ },
+ "tehlike_siniflar_en": {
+  "0": "No hazard",
+  "1": "Caution: steep or rough",
+  "2": "Impassable for the rover (slope)"
+ },
+ "puruzluluk": {
+  "tip": "uint8",
+  "olcek_m": 0.05,
+  "veri_yok": 255,
+  "pencere_m": 25
+ },
+ "guven_notu_en": "5 m grid from the USGS 1 m HiRISE DTM; slope baseline 10 m. Individual rocks under ~1-2 m are not resolved by the DTM."
+}

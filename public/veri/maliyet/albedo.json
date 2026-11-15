@@ -1,0 +1,7 @@
+{
+ "tip": "uint8",
+ "olcek": 0.004,
+ "veri_yok": 255,
+ "kaynak_en": "USGS Astrogeology, Mars MGS TES Global Bolometric Albedo Map 7410 m (Christensen et al. 2001, JGR 106, 23823, doi:10.1029/2000JE001370)",
+ "guven_notu_en": "7.4 km cells resampled to 20 m: regional value only. Used only for the thick-dust landing test."
+}

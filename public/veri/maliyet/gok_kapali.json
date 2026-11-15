@@ -1,0 +1,29 @@
+{
+ "genislik": 860,
+ "yukseklik": 1075,
+ "hucre_m": 100.0,
+ "koseler": [
+  [
+   76.667,
+   19.4
+  ],
+  [
+   78.19793820710478,
+   19.4
+  ],
+  [
+   78.19793820710478,
+   17.586072565655446
+  ],
+  [
+   76.667,
+   17.586072565655446
+  ]
+ ],
+ "tip": "uint8",
+ "olcek": 0.005,
+ "veri_yok": 255,
+ "anlam_en": "Fraction of the sky hidden by terrain (value x 0.005). 16 directions, 3 km radius, from the 20 m CTX elevation grid averaged to 100 m.",
+ "kaynak_en": "Method: Zaksek, Ostir and Kokalj (2011), Remote Sensing 3, 398-415, doi:10.3390/rs3020398. Dose context: Ehresmann et al. (2021), JGR Planets, doi:10.1029/2021JE006851 (about 4-5% lower dose measured by Curiosity RAD with 19% of the sky blocked).",
+ "guven_notu_en": "Information layer only; not used in route cost. Radiation shielding from terrain is small (a few percent) and was measured at one site."
+}

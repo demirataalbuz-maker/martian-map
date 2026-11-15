@@ -1,0 +1,7 @@
+{
+ "tip": "uint16",
+ "birim": "J m-2 K-1 s-1/2",
+ "veri_yok": 65535,
+ "kaynak_en": "USGS Astrogeology, THEMIS Thermal Inertia Mosaic, Quantitative 32-bit, 100 m (Fergason et al.; method Fergason, Christensen and Kieffer 2006, JGR 111, E12004). https://asc-astropedia.s3.us-west-2.amazonaws.com/Mars/Odyssey/THEMIS-Global-Thermal-Inertia-Mosaic/Quantitative-32-Bit/THEMIS_TI_Mosaic_Quant_00N060E_100mpp.cub",
+ "guven_notu_en": "100 m source resampled to 20 m (no new detail). Absolute accuracy about 20 percent. Low values = fine dust/sand, high = rock or duricrust."
+}

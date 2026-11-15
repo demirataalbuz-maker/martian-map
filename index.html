@@ -8,73 +8,142 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Marswalk Map</h1>
-      <span id="site-name" class="site"></span>
-      <span id="synthetic-badge" class="badge" hidden>SYNTHETIC DATA — not real Mars data</span>
+      <div class="topbar-brand">
+        <h1>Marswalk Map</h1>
+        <span id="site-name" class="site"></span>
+        <span id="synthetic-badge" class="badge" hidden>SYNTHETIC DATA — not real Mars data</span>
+      </div>
+      <button id="btn-globe" class="top-btn active" type="button" title="Mars Globe (Why Jezero?)">🌐 Mars Globe</button>
+      <div id="top-scenarios" class="top-scenarios" role="group" aria-label="Mission scenario">
+        <button id="scen-crewed" type="button" class="top-scen-btn active">Crewed · 20 m</button>
+        <button id="scen-rover" type="button" class="top-scen-btn">Rover · 5 m HiRISE</button>
+      </div>
+      <div id="top-traversers" class="top-traversers" role="group" aria-label="Traverser selector"></div>
+      <div class="top-actions">
+        <button id="top-sample" class="top-btn accent" type="button" hidden>★ Sample</button>
+        <button id="top-params-btn" class="top-btn" type="button" aria-expanded="false" aria-controls="params-popover">⚙ Params</button>
+        <button id="top-undo" class="top-btn" type="button" disabled>↶ Undo</button>
+        <button id="top-clear" class="top-btn" type="button" disabled>✕ Clear</button>
+      </div>
+      <div class="topbar-right">
+        <button id="btn-qr" class="top-btn" type="button" aria-expanded="false" aria-controls="qr-popover" aria-label="Show live site QR code and link">⊞ QR</button>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button id="lang-en" type="button" class="lang-btn active">EN</button>
+          <button id="lang-tr" type="button" class="lang-btn">TR</button>
+        </div>
+        <button id="panel-toggle" class="top-btn drawer-btn" type="button" aria-expanded="false" aria-controls="panel">☰ Details &amp; Layers</button>
+      </div>
     </header>
     <div class="layout">
-    <main class="stage">
-      <div id="map" aria-label="Layered map of the traverse area"></div>
-      <div id="map-alert" class="map-alert" role="alert" hidden></div>
-      <div id="scalebar" class="scalebar" aria-live="off">
-        <div class="scalebar-line"></div>
-        <span class="scalebar-label"></span>
-      </div>
-      <div id="terrain-hud" class="terrain-hud" aria-live="off" hidden></div>
-      <div id="status" class="status" role="status"></div>
-    </main>
-    <aside class="panel" id="panel">
-      <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="panel-body">Route &amp; layers</button>
-      <div id="panel-body" class="panel-body">
-        <section id="route-panel" class="route">
-          <h2>Route &amp; landing</h2>
-          <div id="route-traverser" class="route-traverser"></div>
-          <div id="route-mode" class="route-mode" role="group" aria-label="Start mode" hidden>
-            <button id="mode-auto" type="button" class="mode-btn active">Recommend landing</button>
-            <button id="mode-manual" type="button" class="mode-btn">Manual start</button>
-          </div>
-          <div id="route-options" class="route-options">
-            <label class="route-check">
-              <input id="opt-roundtrip" type="checkbox" checked />
-              <span>Round-trip (return to landing / start)</span>
-            </label>
-            <label class="route-number">
-              <span>Work per stop (min)</span>
-              <input id="opt-stop-min" type="number" min="0" max="240" step="5" value="0" />
-            </label>
-            <label class="route-check">
-              <input id="opt-allow-nodata" type="checkbox" />
-              <span>Allow crossing unmapped (no-data) terrain</span>
-            </label>
-          </div>
-          <p id="route-hint" class="route-hint"></p>
-          <div id="route-sample-row" class="route-actions" hidden>
-            <button id="route-sample" class="sample-btn" type="button">Try sample mission</button>
-          </div>
-          <div class="route-actions">
-            <button id="route-undo" type="button" disabled>Undo last point</button>
-            <button id="route-clear" type="button" disabled>Clear route</button>
-          </div>
-          <div class="route-actions">
-            <button id="route-download" type="button" disabled>Download route (GeoJSON)</button>
-          </div>
-          <p id="route-message" class="route-message" role="status" hidden></p>
-          <div id="load-progress" class="progress-wrap" hidden>
-            <div class="progress-track">
-              <div id="load-progress-bar" class="progress-bar"></div>
+      <main class="stage">
+        <div id="map" aria-label="Layered map of the traverse area"></div>
+        <aside id="globe-card" class="globe-card" aria-label="Global Mars context and Jezero selection">
+          <div class="globe-card-kicker" id="globe-kicker">GLOBAL MARS CONTEXT · z0–z5</div>
+          <h2 id="globe-title">Why Jezero Crater?</h2>
+          <p id="globe-lead" class="globe-lead">
+            Because Jezero has the richest ready-to-use multi-resolution dataset achievable in a single day, it is our study area.
+          </p>
+          <div id="globe-stats" class="globe-stats"></div>
+          <div class="globe-controls">
+            <div class="globe-ctrl-group">
+              <span id="globe-base-lbl" class="globe-ctrl-label">Global basemap</span>
+              <div id="globe-base-pills" class="globe-pills" role="group" aria-label="Global basemap"></div>
+            </div>
+            <div class="globe-ctrl-group">
+              <span id="globe-ovl-lbl" class="globe-ctrl-label">Global screening &amp; environment</span>
+              <div id="globe-ovl-pills" class="globe-pills" role="group" aria-label="Global screening overlay"></div>
             </div>
           </div>
-          <div id="landing-candidates" class="landing-candidates" hidden></div>
-          <div id="route-results" class="route-results" hidden></div>
-          <details id="route-compare" class="compare-details" hidden>
-            <summary>Compare all traversers on this mission</summary>
-            <div id="route-compare-body" class="compare-body"></div>
-          </details>
+          <p id="globe-attribution" class="globe-attribution"></p>
+          <div class="globe-cta-row">
+            <button id="btn-explore-jezero" class="globe-cta-btn" type="button">Explore Jezero Study Area ▸</button>
+          </div>
+        </aside>
+        <div id="empty-prompt" class="empty-prompt" hidden>Tap a science stop (◆) or click terrain to plan · <strong>★ Sample</strong> for 1-click demo</div>
+        <div id="map-alert" class="map-alert" role="alert" hidden></div>
+        <div id="params-popover" class="params-popover" role="dialog" aria-label="What-If parameter sandbox" hidden></div>
+        <div id="qr-popover" class="qr-popover" role="dialog" aria-label="Live site QR code and link" hidden></div>
+        <section id="mission-dock" class="mission-dock" aria-label="Mission summary and live fault simulator" hidden>
+          <div id="dock-summary" class="dock-summary">
+            <div id="dock-metrics" class="dock-metrics"></div>
+            <button id="dock-details-btn" class="dock-details-btn" type="button">Charts &amp; Details ▸</button>
+          </div>
+          <div id="dock-sim" class="dock-sim">
+            <button id="sim-play" class="sim-btn primary" type="button">▶ Play</button>
+            <button id="sim-speed" class="sim-btn speed" type="button" title="Playback speed">240×</button>
+            <input id="sim-scrub" class="sim-scrub" type="range" min="0" max="1000" value="0" aria-label="Mission timeline scrub" />
+            <span id="sim-telemetry" class="sim-telemetry">0 m · 0 min</span>
+            <button id="sim-fault" class="sim-btn fault" type="button">⚡ Trigger Rover Fault!</button>
+            <button id="sim-clear-fault" class="sim-btn" type="button" hidden>↺ Clear Fault</button>
+          </div>
+          <div id="fault-card" class="fault-card" hidden></div>
         </section>
-        <h2>Layers</h2>
-        <div id="layer-list"></div>
-      </div>
-    </aside>
+        <div id="scalebar" class="scalebar" aria-live="off">
+          <div class="scalebar-line"></div>
+          <span class="scalebar-label"></span>
+        </div>
+        <div id="terrain-hud" class="terrain-hud" aria-live="off" hidden></div>
+        <div id="status" class="status" role="status"></div>
+      </main>
+      <aside class="panel collapsed" id="panel">
+        <div class="drawer-head">
+          <span id="drawer-title" class="drawer-title">Route, Profiles &amp; Layers</span>
+          <button id="drawer-close" class="drawer-close" type="button" aria-label="Close panel">✕</button>
+        </div>
+        <div id="panel-body" class="panel-body">
+          <section id="route-panel" class="route">
+            <h2 id="route-heading">Route &amp; landing</h2>
+            <div id="route-traverser" class="route-traverser"></div>
+            <div id="route-mode" class="route-mode" role="group" aria-label="Start mode" hidden>
+              <button id="mode-auto" type="button" class="mode-btn active">Recommend landing</button>
+              <button id="mode-manual" type="button" class="mode-btn">Manual start</button>
+            </div>
+            <div id="route-options" class="route-options">
+              <label class="route-check">
+                <input id="opt-roundtrip" type="checkbox" checked />
+                <span id="lbl-roundtrip">Round-trip (return to landing / start)</span>
+              </label>
+              <label class="route-check">
+                <input id="opt-optimize-stops" type="checkbox" />
+                <span id="lbl-optimize-stops">Optimize stop visit order (up to 7 stops)</span>
+              </label>
+              <label class="route-number">
+                <span id="lbl-stop-min">Work per stop (min)</span>
+                <input id="opt-stop-min" type="number" min="0" max="240" step="5" value="0" />
+              </label>
+              <label class="route-check">
+                <input id="opt-allow-nodata" type="checkbox" />
+                <span id="lbl-allow-nodata">Allow crossing unmapped (no-data) terrain</span>
+              </label>
+            </div>
+            <p id="route-hint" class="route-hint"></p>
+            <div id="route-sample-row" class="route-actions" hidden>
+              <button id="route-sample" class="sample-btn" type="button">Try sample mission</button>
+            </div>
+            <div class="route-actions">
+              <button id="route-undo" type="button" disabled>Undo last point</button>
+              <button id="route-clear" type="button" disabled>Clear route</button>
+            </div>
+            <div class="route-actions">
+              <button id="route-download" type="button" disabled>Download route (GeoJSON)</button>
+            </div>
+            <p id="route-message" class="route-message" role="status" hidden></p>
+            <div id="load-progress" class="progress-wrap" hidden>
+              <div class="progress-track">
+                <div id="load-progress-bar" class="progress-bar"></div>
+              </div>
+            </div>
+            <div id="landing-candidates" class="landing-candidates" hidden></div>
+            <div id="route-results" class="route-results" hidden></div>
+            <details id="route-compare" class="compare-details" hidden>
+              <summary id="route-compare-summary">Compare all traversers on this mission</summary>
+              <div id="route-compare-body" class="compare-body"></div>
+            </details>
+          </section>
+          <h2 id="layers-heading">Layers</h2>
+          <div id="layer-list"></div>
+        </div>
+      </aside>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

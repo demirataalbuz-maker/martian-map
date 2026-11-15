@@ -7,6 +7,7 @@
 import { Marker, Popup, type Map as MlMap } from 'maplibre-gl';
 import { DATA_DIR } from './config';
 import type { ScienceStop } from './data';
+import { onLangChange, ui } from './i18n';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -15,47 +16,83 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
   return node;
 }
 
-export function initStops(map: MlMap, stops: ScienceStop[], onAddToRoute: (stop: ScienceStop) => void): void {
+export interface StopsController {
+  setFilter(predicate: ((stop: ScienceStop) => boolean) | null): void;
+}
+
+export function initStops(map: MlMap, stops: ScienceStop[], onAddToRoute: (stop: ScienceStop) => void): StopsController {
+  const updaters: (() => void)[] = [];
+  const entries: { stop: ScienceStop; marker: Marker; popup: Popup }[] = [];
+
   for (const stop of stops) {
-    const card = el('div', 'stop-card');
-    card.append(el('h3', undefined, stop.ad_en));
-    if (stop.aciklama_en) card.append(el('p', undefined, stop.aciklama_en));
-
-    if (stop.foto) {
-      const figure = el('figure');
-      const img = el('img');
-      img.src = `${DATA_DIR}/${stop.foto}`;
-      img.alt = `Surface photo at ${stop.ad_en}`;
-      img.loading = 'lazy';
-      img.addEventListener('error', () => figure.replaceChildren(el('p', 'stop-nophoto', 'Photo could not be loaded.')));
-      figure.append(img);
-      figure.append(el('figcaption', undefined, stop.foto_kaynak ? `Credit: ${stop.foto_kaynak}` : 'Credit: not stated'));
-      card.append(figure);
-    } else {
-      card.append(el('p', 'stop-nophoto', 'No surface photo provided for this stop.'));
-    }
-
     const popup = new Popup({ offset: 16, maxWidth: '280px', closeButton: true });
-    const add = el('button', 'stop-add', 'Add to route');
-    add.type = 'button';
-    add.addEventListener('click', () => {
-      onAddToRoute(stop);
-      popup.remove();
-    });
-    card.append(add);
-    popup.setDOMContent(card);
-
     const element = el('button', 'stop-marker');
     element.type = 'button';
     element.title = stop.ad_en;
-    element.setAttribute('aria-label', `Science stop: ${stop.ad_en}`);
-    // Keep the tap from reaching the map, where it would add a route point.
     element.addEventListener('click', (event) => event.stopPropagation());
 
-    new Marker({ element }).setLngLat(stop.konum).addTo(map);
+    const buildCard = () => {
+      const card = el('div', 'stop-card');
+      card.append(el('h3', undefined, stop.ad_en));
+      if (stop.aciklama_en) card.append(el('p', undefined, stop.aciklama_en));
+
+      if (stop.foto) {
+        const figure = el('figure');
+        const img = el('img');
+        img.src = `${DATA_DIR}/${stop.foto}`;
+        img.alt = ui(`Surface photo at ${stop.ad_en}`, `${stop.ad_en} yüzey fotoğrafı`);
+        img.loading = 'lazy';
+        img.addEventListener('error', () =>
+          figure.replaceChildren(el('p', 'stop-nophoto', ui('Photo could not be loaded.', 'Fotoğraf yüklenemedi.'))),
+        );
+        figure.append(img);
+        figure.append(
+          el(
+            'figcaption',
+            undefined,
+            stop.foto_kaynak
+              ? ui(`Credit: ${stop.foto_kaynak}`, `Kaynak: ${stop.foto_kaynak}`)
+              : ui('Credit: not stated', 'Kaynak: belirtilmedi'),
+          ),
+        );
+        card.append(figure);
+      } else {
+        card.append(el('p', 'stop-nophoto', ui('No surface photo provided for this stop.', 'Bu durak için yüzey fotoğrafı sağlanmadı.')));
+      }
+
+      const add = el('button', 'stop-add', ui('Add to route', 'Rotaya ekle'));
+      add.type = 'button';
+      add.addEventListener('click', () => {
+        onAddToRoute(stop);
+        popup.remove();
+      });
+      card.append(add);
+      popup.setDOMContent(card);
+      element.setAttribute('aria-label', ui(`Science stop: ${stop.ad_en}`, `Bilim durağı: ${stop.ad_en}`));
+    };
+
+    buildCard();
+    updaters.push(buildCard);
+
+    const marker = new Marker({ element }).setLngLat(stop.konum).addTo(map);
+    entries.push({ stop, marker, popup });
     element.addEventListener('click', () => {
       if (popup.isOpen()) popup.remove();
       else popup.setLngLat(stop.konum).addTo(map);
     });
   }
+
+  onLangChange(() => {
+    for (const u of updaters) u();
+  });
+
+  return {
+    setFilter(predicate) {
+      for (const entry of entries) {
+        const show = predicate ? predicate(entry.stop) : true;
+        entry.marker.getElement().style.display = show ? '' : 'none';
+        if (!show && entry.popup.isOpen()) entry.popup.remove();
+      }
+    },
+  };
 }

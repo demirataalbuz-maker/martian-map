@@ -1,0 +1,459 @@
+{
+ "sahte": false,
+ "olusturma": "2026-11-15",
+ "not_en": "Add these layers to katmanlar.json. Grid files (.bin) are described by the json next to them in maliyet/.",
+ "katmanlar": [
+  {
+   "id": "ctx_murray",
+   "ad_en": "CTX image mosaic, 5 m (Murray Lab global mosaic)",
+   "tur": "altlik",
+   "karolar": "karolar/ctx_murray/{z}/{x}/{y}.webp",
+   "sema": "xyz",
+   "min_zoom": 6,
+   "max_zoom": 14,
+   "sinir": [
+    76.667,
+    17.586072565655446,
+    78.19793820710478,
+    19.4
+   ],
+   "kaynak": "NASA/JPL/MSSS/The Murray Lab. MRO Context Camera (CTX) Global Mosaic V01, tile MurrayLab_CTX_V01_E076_N16. Dickson et al. (2024), Earth and Space Science 11, doi:10.1029/2024EA003555; data doi:10.17189/m23v-ae12. https://murray-lab.caltech.edu/CTX/",
+   "cozunurluk_m": 5,
+   "guven_notu_en": "Free use for all purposes granted by the Murray Lab/Caltech. Shifted by a constant 46 m west and 16 m south to match the USGS Mars 2020 CTX orthomosaic; residual offsets of up to about 15 m remain locally because the source images are not individually controlled. Brightness is visually normalized, not calibrated reflectance.",
+   "lejant": []
+  },
+  {
+   "id": "ctx_usgs_m2020",
+   "ad_en": "Mars 2020 landing orthomosaic, CTX 6 m (USGS)",
+   "tur": "altlik",
+   "karolar": "karolar/ctx_usgs_m2020/{z}/{x}/{y}.webp",
+   "sema": "xyz",
+   "min_zoom": 6,
+   "max_zoom": 14,
+   "sinir": [
+    77.16047,
+    18.21103,
+    77.69918,
+    18.72119
+   ],
+   "kaynak": "USGS Astrogeology / NASA, Mars 2020 Terrain Relative Navigation CTX orthomosaic JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0. https://planetarymaps.usgs.gov/mosaic/mars2020_trn/CTX/",
+   "cozunurluk_m": 6,
+   "guven_notu_en": "Map base used for Perseverance terrain relative navigation; covers only the central 32 x 30 km. Smoother and cleaner than the Murray mosaic but with less fine detail. Reference for aligning the other layers.",
+   "lejant": []
+  },
+  {
+   "id": "kure_yukseklik",
+   "ad_en": "Global elevation (MOLA)",
+   "tur": "topographic",
+   "karolar": "karolar/kure_yukseklik/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "MGS MOLA MEGDR 16 pixels/degree (megt90n000eb), PDS Geosciences Node; Smith et al. 2001, JGR 106, 23689",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": []
+  },
+  {
+   "id": "kure_termal_atalet",
+   "ad_en": "Global thermal inertia (TES)",
+   "tur": "thermal",
+   "karolar": "karolar/kure_termal_atalet/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "TES nighttime thermal inertia, Putzig and Mellon 2007 (Icarus 191, 68), via ASU JMARS map server, resampled to 0.1 deg",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": []
+  },
+  {
+   "id": "kure_albedo",
+   "ad_en": "Global albedo (TES)",
+   "tur": "optical",
+   "karolar": "karolar/kure_albedo/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "MGS TES bolometric albedo 7410 m, USGS Astrogeology (Christensen et al. 2001)",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": []
+  },
+  {
+   "id": "kure_uygunluk_insanli",
+   "ad_en": "Global landing screening: crewed lander",
+   "tur": "inis",
+   "karolar": "karolar/kure_uygunluk_insanli/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "Thermal inertia < 100 and albedo > 0.25 considered thick dust, not suitable (MSL Landing Site Engineering User's Guide v2)",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": [
+    {
+     "renk": "#50d28c",
+     "etiket_en": "Suitable"
+    },
+    {
+     "renk": "#965a3c",
+     "etiket_en": "Too high"
+    },
+    {
+     "renk": "#78788c",
+     "etiket_en": "Outside latitude band"
+    },
+    {
+     "renk": "#f0f0eb",
+     "etiket_en": "Thick dust"
+    }
+   ]
+  },
+  {
+   "id": "kure_uygunluk_robotik",
+   "ad_en": "Global landing screening: robotic lander",
+   "tur": "inis",
+   "karolar": "karolar/kure_uygunluk_robotik/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "Thermal inertia < 100 and albedo > 0.25 considered thick dust, not suitable (MSL Landing Site Engineering User's Guide v2)",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": [
+    {
+     "renk": "#50d28c",
+     "etiket_en": "Suitable"
+    },
+    {
+     "renk": "#965a3c",
+     "etiket_en": "Too high"
+    },
+    {
+     "renk": "#78788c",
+     "etiket_en": "Outside latitude band"
+    },
+    {
+     "renk": "#f0f0eb",
+     "etiket_en": "Thick dust"
+    }
+   ]
+  },
+  {
+   "id": "kure_atmosfer_kalkani",
+   "ad_en": "Global atmospheric shielding (radiation context)",
+   "tur": "radiation",
+   "karolar": "karolar/kure_atmosfer_kalkani/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": []
+  },
+  {
+   "id": "kure_toz_firtinasi",
+   "ad_en": "Global dust storm frequency (MDAD)",
+   "tur": "atmospheric",
+   "karolar": "karolar/kure_toz_firtinasi/{z}/{x}/{y}.png",
+   "sema": "xyz",
+   "min_zoom": 0,
+   "max_zoom": 4,
+   "sinir": [
+    -180,
+    -85,
+    180,
+    85
+   ],
+   "kaynak": "",
+   "cozunurluk_m": 5900,
+   "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+   "lejant": []
+  },
+  {
+   "id": "hillshade",
+   "ad_en": "Shaded relief (CTX DEM)",
+   "tur": "topographic",
+   "dosya": "katman/golgeli_kabartma.png",
+   "koseler": [
+    [
+     76.667,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     17.586072565655446
+    ],
+    [
+     76.667,
+     17.586072565655446
+    ]
+   ],
+   "cozunurluk_m": 40,
+   "guven_notu_en": "From the 20 m CTX elevation grid (effective resolution about 75-80 m).",
+   "lejant": []
+  },
+  {
+   "id": "slope",
+   "ad_en": "Slope (degrees, 40 m baseline)",
+   "tur": "topographic",
+   "dosya": "katman/egim.png",
+   "koseler": [
+    [
+     76.667,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     17.586072565655446
+    ],
+    [
+     76.667,
+     17.586072565655446
+    ]
+   ],
+   "cozunurluk_m": 40,
+   "guven_notu_en": "From the 20 m CTX elevation grid (effective resolution about 75-80 m).",
+   "lejant": [
+    {
+     "renk": "#1a9850",
+     "etiket_en": "0"
+    },
+    {
+     "renk": "#fee08b",
+     "etiket_en": "10"
+    },
+    {
+     "renk": "#f46d43",
+     "etiket_en": "20"
+    },
+    {
+     "renk": "#67001f",
+     "etiket_en": "40+"
+    }
+   ]
+  },
+  {
+   "id": "elevation",
+   "ad_en": "Elevation (colour)",
+   "tur": "topographic",
+   "dosya": "katman/yukseklik.png",
+   "koseler": [
+    [
+     76.667,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     17.586072565655446
+    ],
+    [
+     76.667,
+     17.586072565655446
+    ]
+   ],
+   "cozunurluk_m": 40,
+   "guven_notu_en": "From the 20 m CTX elevation grid (effective resolution about 75-80 m). Absolute height may be off by up to ~20 m.",
+   "lejant": []
+  },
+  {
+   "id": "roughness",
+   "ad_en": "Terrain roughness (m)",
+   "tur": "topographic",
+   "dosya": "katman/puruzluluk.png",
+   "koseler": [
+    [
+     76.667,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     17.586072565655446
+    ],
+    [
+     76.667,
+     17.586072565655446
+    ]
+   ],
+   "cozunurluk_m": 40,
+   "guven_notu_en": "From the 20 m CTX elevation grid (effective resolution about 75-80 m). Boulders are not resolved.",
+   "lejant": []
+  },
+  {
+   "id": "sky_blocked",
+   "ad_en": "Sky blocked by terrain (radiation shielding context)",
+   "tur": "radiation",
+   "dosya": "katman/gok_kapali.png",
+   "koseler": [
+    [
+     76.667,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     17.586072565655446
+    ],
+    [
+     76.667,
+     17.586072565655446
+    ]
+   ],
+   "cozunurluk_m": 100,
+   "guven_notu_en": "Curiosity RAD measured ~4-5% lower dose with 19% of the sky blocked (Ehresmann et al. 2021). Information only, not used in route cost.",
+   "lejant": []
+  },
+  {
+   "id": "geology",
+   "ad_en": "Geologic units (USGS SIM 3464)",
+   "tur": "geologic",
+   "dosya": "katman/jeoloji.png",
+   "koseler": [
+    [
+     76.667,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     19.4
+    ],
+    [
+     78.19793820710478,
+     17.586072565655446
+    ],
+    [
+     76.667,
+     17.586072565655446
+    ]
+   ],
+   "cozunurluk_m": 40,
+   "guven_notu_en": "Mapped at 1:75,000; covers part of the box only.",
+   "lejant": []
+  },
+  {
+   "id": "hirise_slope",
+   "ad_en": "Slope, HiRISE detail area (10 m baseline)",
+   "tur": "topographic",
+   "dosya": "ince/katman/egim.png",
+   "koseler": [
+    [
+     77.223,
+     18.669
+    ],
+    [
+     77.58394278668551,
+     18.669
+    ],
+    [
+     77.58394278668551,
+     18.30704117276914
+    ],
+    [
+     77.223,
+     18.30704117276914
+    ]
+   ],
+   "cozunurluk_m": 10,
+   "guven_notu_en": "USGS HiRISE DTM 1 m averaged to 5 m.",
+   "lejant": []
+  },
+  {
+   "id": "hirise_hillshade",
+   "ad_en": "Shaded relief, HiRISE detail area",
+   "tur": "topographic",
+   "dosya": "ince/katman/golgeli_kabartma.png",
+   "koseler": [
+    [
+     77.223,
+     18.669
+    ],
+    [
+     77.58394278668551,
+     18.669
+    ],
+    [
+     77.58394278668551,
+     18.30704117276914
+    ],
+    [
+     77.223,
+     18.30704117276914
+    ]
+   ],
+   "cozunurluk_m": 10,
+   "guven_notu_en": "USGS HiRISE DTM.",
+   "lejant": []
+  }
+ ],
+ "izgara_dosyalari": [
+  "albedo.bin",
+  "egim.bin",
+  "gok_kapali.bin",
+  "inis.bin",
+  "inis_insanli.bin",
+  "jeoloji.bin",
+  "puruzluluk.bin",
+  "sivri_maske.bin",
+  "tehlike.bin",
+  "termal_atalet.bin",
+  "yukseklik.bin"
+ ],
+ "ince_izgara": "ince/maliyet/izgara.json"
+}

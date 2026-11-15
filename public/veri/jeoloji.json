@@ -1,0 +1,95 @@
+{
+ "tip": "uint8",
+ "veri_yok": 255,
+ "birimsiz": 0,
+ "genislik": 4303,
+ "yukseklik": 5376,
+ "birimler": [
+  {
+   "kod": 1,
+   "sembol": "NHjf1",
+   "ad_en": "Jezero fan 1 unit (delta)",
+   "renk": "#c98b4f"
+  },
+  {
+   "kod": 2,
+   "sembol": "NHjf2",
+   "ad_en": "Jezero fan 2 unit (delta)",
+   "renk": "#e0a96d"
+  },
+  {
+   "kod": 3,
+   "sembol": "Njf",
+   "ad_en": "Jezero floor unit",
+   "renk": "#8c6d9e"
+  },
+  {
+   "kod": 4,
+   "sembol": "Nle",
+   "ad_en": "Lower etched unit",
+   "renk": "#5f8fbf"
+  },
+  {
+   "kod": 5,
+   "sembol": "Nue",
+   "ad_en": "Upper etched unit",
+   "renk": "#9cc3e6"
+  },
+  {
+   "kod": 6,
+   "sembol": "Hnpf",
+   "ad_en": "Nili Planum fan unit",
+   "renk": "#d9c27a"
+  },
+  {
+   "kod": 7,
+   "sembol": "Nnp1",
+   "ad_en": "Nili Planum 1 unit",
+   "renk": "#a7b37a"
+  },
+  {
+   "kod": 8,
+   "sembol": "Nnp2",
+   "ad_en": "Nili Planum 2 unit",
+   "renk": "#7f9b5d"
+  },
+  {
+   "kod": 9,
+   "sembol": "Nrb",
+   "ad_en": "Rugged bright unit",
+   "renk": "#e6e1c8"
+  },
+  {
+   "kod": 10,
+   "sembol": "su",
+   "ad_en": "Smooth unit, undivided",
+   "renk": "#c7c7c7"
+  },
+  {
+   "kod": 11,
+   "sembol": "Aeb",
+   "ad_en": "Eolian bedform unit (sand ripples and dunes)",
+   "renk": "#f2d649"
+  },
+  {
+   "kod": 12,
+   "sembol": "cr",
+   "ad_en": "Crater rim unit",
+   "renk": "#b5533c"
+  },
+  {
+   "kod": 13,
+   "sembol": "ce",
+   "ad_en": "Crater ejecta unit",
+   "renk": "#d98a74"
+  },
+  {
+   "kod": 14,
+   "sembol": "ci",
+   "ad_en": "Crater interior unit",
+   "renk": "#7a4a3a"
+  }
+ ],
+ "kaynak_en": "Sun, V.Z., and Stack, K.M., 2020, Geologic map of Jezero crater and the Nili Planum region, Mars: USGS Scientific Investigations Map 3464, scale 1:75,000, https://doi.org/10.3133/sim3464",
+ "guven_notu_en": "Mapped at 1:75,000 on CTX images; unit contacts are interpretive and accurate to roughly 100 m. Covers only part of the box (about 56 x 59 km around Jezero); outside it is no data, not 'no unit'. Colours are ours, not the USGS legend."
+}

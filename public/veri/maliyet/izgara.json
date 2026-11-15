@@ -1,33 +1,51 @@
 {
-  "sahte": true,
-  "alan_en": "Jezero & Nili Fossae region (synthetic 86 × 108 km)",
-  "genislik": 4300,
-  "yukseklik": 5375,
-  "hucre_m": 20,
+  "sahte": false,
+  "genislik": 4303,
+  "yukseklik": 5376,
+  "hucre_m": 20.0,
   "koseler": [
     [
       76.667,
       19.4
     ],
     [
-      78.198,
+      78.19793820710478,
       19.4
     ],
     [
-      78.198,
-      17.586
+      78.19793820710478,
+      17.586072565655446
     ],
     [
       76.667,
-      17.586
+      17.586072565655446
     ]
   ],
+  "projeksiyon": "+proj=eqc +lat_ts=18.493 +lat_0=0 +lon_0=0 +x_0=0 +y_0=0 +R=3396190 +units=m +no_defs",
   "egim_tipi": "uint8",
   "egim_olcek": 0.25,
   "egim_veri_yok": 255,
-  "egim_taban_uzunlugu_m": 20,
+  "egim_taban_uzunlugu_m": 40.0,
+  "egim_yontemi_en": "3x3 Horn on a 20 m grid (40 m baseline); east-west spacing corrected per row; byte rounded up",
   "yukseklik_tipi": "int16",
-  "yukseklik_taban_m": 0,
-  "yukseklik_olcek_m": 0.5,
-  "yukseklik_veri_yok": -32768
+  "yukseklik_taban_m": -2000.0,
+  "yukseklik_olcek_m": 0.1,
+  "yukseklik_veri_yok": -32768,
+  "kaynak_en": "64 USGS Astrogeology CTX DTMs (MRO CTX, 20 m posting). Each DTM shifted vertically by the median MOLA difference in its own USGS qa_metrics.txt and horizontally by the offset of its own orthoimage against the Murray Lab CTX mosaic (itself aligned to the USGS Mars 2020 CTX orthomosaic); blended with ASP dem_mosaic. Single-cell spikes >30 m replaced by 5x5 median.",
+  "guven_notu_en": "Effective resolution about 75-80 m (measured against the USGS 1 m HiRISE DTM): smaller hills, pits and craters are smoothed and their slopes underestimated. Absolute height can be off by up to about 20 m; slope uncertainty about 2 deg.",
+  "olusturma": "2026-11-14",
+  "istatistik": {
+    "egim_medyan_derece": 4.04,
+    "egim_p90_derece": 11.49,
+    "egim_p99_derece": 23.43,
+    "oran_5_ustu": 0.4003,
+    "oran_10_ustu": 0.1336,
+    "oran_15_ustu": 0.0526,
+    "oran_20_ustu": 0.0207,
+    "oran_25_ustu": 0.0071,
+    "egim_veri_yok_orani": 0.00128,
+    "yukseklik_min_m": -3156.4,
+    "yukseklik_max_m": -519.5,
+    "sivri_duzeltilen_hucre": 4184
+  }
 }

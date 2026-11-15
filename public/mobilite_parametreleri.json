@@ -1,6 +1,33 @@
 {
   "sahte": false,
-  "not_en": "Mobility and landing parameters for the 20 m CTX Jezero crater region cost grid (Mars Rover Demo v1 & suited EVA walk-back model).",
+  "not_en": "Mobility and landing parameters for Jezero 20 m CTX (crewed) & 5 m HiRISE (robotic rover) grids, synced with mobilite_cagatay_2026-11-15.json.",
+  "zemin_etkisi": {
+    "cok_gevsek_termal_atalet": {
+      "deger": 200,
+      "kaynak": "Fine unconsolidated sand/dust split within <350 J m-2 K-1 s-1/2 loose-ground band (Fergason et al. 2006 TI regime)",
+      "guven": "VARSAYIM"
+    },
+    "gevsek_hiz_carpani": {
+      "deger": 0.85,
+      "kaynak": "Assumed traverse speed factor on loose fine-grained regolith (200 <= TI < 350)",
+      "guven": "VARSAYIM"
+    },
+    "cok_gevsek_hiz_carpani": {
+      "deger": 0.7,
+      "kaynak": "Assumed traverse speed factor on very loose sand (TI < 200)",
+      "guven": "VARSAYIM"
+    },
+    "gevsek_yuvarlanma_direnci": {
+      "deger": 0.08,
+      "kaynak": "Assumed wheel rolling resistance coefficient on loose regolith (200 <= TI < 350 vs 0.05 bedrock)",
+      "guven": "VARSAYIM"
+    },
+    "cok_gevsek_yuvarlanma_direnci": {
+      "deger": 0.12,
+      "kaynak": "Assumed wheel rolling resistance coefficient on soft sand / eolian bedforms (TI < 200 or SIM 3464 Aeb)",
+      "guven": "VARSAYIM"
+    }
+  },
   "inis_araci": {
     "azami_egim_derece": {
       "deger": 10,
@@ -12,24 +39,88 @@
       "kaynak": "NASA 2015 Human Landing Site Study (HLS2) < +2 km MOLA elevation ceiling",
       "guven": "tasarim_degeri"
     },
-    "guvenli_alan_capi_m": {
-      "deger": 400,
-      "kaynak": "Candidate landing-zone minimum centre separation (200 m radius tier threshold in landing scoring model)",
+    "azami_kaya_m": {
+      "deger": 0.55,
+      "kaynak": "no crewed source; robotic value used as placeholder",
       "guven": "VARSAYIM"
+    },
+    "guvenli_alan_capi_m": {
+      "deger": 100,
+      "kaynak": "NASA HLS2 presentation p. 16 (verified by Yigit)",
+      "guven": "tasarim_degeri"
+    },
+    "puskurtme_guvenlik_yaricapi_m": {
+      "deger": 1000,
+      "kaynak": "NASA HLS2 presentation p. 16; Metzger plume keep-out zone (arxiv:2104.06248v1)",
+      "guven": "tasarim_degeri"
+    }
+  },
+  "inis_araci_insanli": {
+    "azami_egim_derece": {
+      "deger": 10,
+      "kaynak": "NASA 2015 Human Landing Site Study (HLS2) ~10° regional slope limit",
+      "guven": "tasarim_degeri"
+    },
+    "azami_yukseklik_m": {
+      "deger": 2000,
+      "kaynak": "NASA 2015 Human Landing Site Study (HLS2) < +2 km MOLA elevation ceiling",
+      "guven": "tasarim_degeri"
+    },
+    "azami_kaya_m": {
+      "deger": 0.55,
+      "kaynak": "no crewed source; robotic value used as placeholder",
+      "guven": "VARSAYIM"
+    },
+    "guvenli_alan_capi_m": {
+      "deger": 100,
+      "kaynak": "NASA HLS2 presentation p. 16 (verified by Yigit)",
+      "guven": "tasarim_degeri"
+    },
+    "puskurtme_guvenlik_yaricapi_m": {
+      "deger": 1000,
+      "kaynak": "NASA HLS2 presentation p. 16; Metzger plume keep-out zone (arxiv:2104.06248v1)",
+      "guven": "tasarim_degeri"
+    }
+  },
+  "inis_araci_robotik": {
+    "azami_egim_derece": {
+      "deger": 30,
+      "kaynak": "Golombek et al. 2012, Selection of the MSL Landing Site (2–5 m baseline)",
+      "guven": "tasarim_degeri"
+    },
+    "azami_yukseklik_m": {
+      "deger": 500,
+      "kaynak": "Mars 2020 landing site engineering constraints",
+      "guven": "tasarim_degeri"
+    },
+    "azami_kaya_m": {
+      "deger": 0.6,
+      "kaynak": "Mars 2020 landing site engineering constraints (belly pan)",
+      "guven": "tasarim_degeri"
+    },
+    "guvenli_alan_capi_m": {
+      "deger": 200,
+      "kaynak": "Mars 2020 landing constraints (TRN: safe area radius > 100 m)",
+      "guven": "tasarim_degeri"
     }
   },
   "yuruyen_insan": {
     "ad_en": "Walking astronaut (suited)",
-    "aciklama_en": "Suited EVA on foot; conservative uphill speeds used in the symmetric undirected grid model.",
+    "aciklama_en": "Suited EVA on foot; 12.8 km round-trip EVA budget (1 EVA/day), 10 km radial walk-back ceiling, conservative uphill slope speeds.",
     "azami_egim_derece": {
+      "deger": 20,
+      "kaynak": "NASA xEVA System ConOps EVA-EXP-0042 Rev B (20° traverse limit)",
+      "guven": "tasarim_degeri (Ay)"
+    },
+    "uyari_egim_derece": {
       "deger": 15,
-      "kaynak": "20 m CTX grid scale ceiling (15° suited walkability cap on 20 m cells)",
-      "guven": "VARSAYIM"
+      "kaynak": "Apollo 15 steepest walked slope (S0094576524003746; xEVA ConOps ~17°)",
+      "guven": "olculmus (Ay)"
     },
     "yurume_baz_hiz_km_sa": {
       "deger": 2,
-      "kaynak": "NASA Lunar Terrain Vehicle (LTV) unpressurized walk-back planning speed (2 km/h)",
-      "guven": "tasarim_degeri"
+      "kaynak": "NASA EHP Integrated ConOps Rev B walking speed (2 km/h)",
+      "guven": "tasarim_degeri (Ay)"
     },
     "hiz_tablosu": {
       "deger": [
@@ -57,9 +148,45 @@
           "egim_derece": 15,
           "hiz_km_sa": 0.79,
           "hiz_m_s": 0.219
+        },
+        {
+          "egim_derece": 20,
+          "hiz_km_sa": 0.5,
+          "hiz_m_s": 0.139
         }
       ],
-      "kaynak": "Conservative uphill values (2.01 / 1.48 / 1.09 / 0.96 / 0.79 km/h at 0/5/10/12/15°) from terrestrial hiking slope formula anchored to 2 km/h NASA LTV baseline; unvalidated for Mars",
+      "kaynak": "Conservative uphill walking curve anchored to 2 km/h NASA LTV/EHP baseline and extended to 20° xEVA ceiling; unvalidated for Mars",
+      "guven": "VARSAYIM"
+    },
+    "inis_hiz_tablosu": {
+      "deger": [
+        {
+          "egim_derece": 0,
+          "hiz_km_sa": 2.01,
+          "hiz_m_s": 0.558
+        },
+        {
+          "egim_derece": 5,
+          "hiz_km_sa": 2.2,
+          "hiz_m_s": 0.611
+        },
+        {
+          "egim_derece": 10,
+          "hiz_km_sa": 1.7,
+          "hiz_m_s": 0.472
+        },
+        {
+          "egim_derece": 15,
+          "hiz_km_sa": 1.2,
+          "hiz_m_s": 0.333
+        },
+        {
+          "egim_derece": 20,
+          "hiz_km_sa": 0.8,
+          "hiz_m_s": 0.222
+        }
+      ],
+      "kaynak": "Assumed suited downhill walking curve anchored to 2 km/h NASA ConOps baseline (gentle 5° descent slightly gravity-assisted; ≥10° limited by suit heel-braking and CoM stability)",
       "guven": "VARSAYIM"
     },
     "azami_engel_m": {
@@ -81,19 +208,34 @@
       "deger": 6.4,
       "kaynak": "0.80 reserve factor × 8 h Artemis PLSS design target",
       "guven": "VARSAYIM"
+    },
+    "sefer_mesafe_m": {
+      "deger": 12800,
+      "kaynak": "mobilite_cagatay_2026-11-15.json → sefer_butcesi.yuruyen_insan (6.4 h × 2 km/h flat round-trip per EVA)",
+      "guven": "olceklenmis"
+    },
+    "gunde_eva_sayisi": {
+      "deger": 1,
+      "kaynak": "NASA xEVA ConOps (1 EVA/day; 24 h/person/week)",
+      "guven": "olceklenmis"
+    },
+    "uzaklik_tavani_m": {
+      "deger": 10000,
+      "kaynak": "NASA EHP Integrated ConOps Rev B walk-back ceiling (10 km)",
+      "guven": "tasarim_degeri"
     }
   },
   "roverli_insan": {
     "ad_en": "Crewed rover",
-    "aciklama_en": "Unpressurized crewed rover (Mars Rover Demo v1); bounded by 6.4 h walk-back survival rule and 10 km radial standoff cap.",
+    "aciklama_en": "Unpressurized crewed rover (Mars Rover Demo v1); 17 km daily range, bounded by 6.4 h walk-back survival rule and 10 km radial standoff cap.",
     "azami_egim_derece": {
-      "deger": 15,
-      "kaynak": "20 m CTX grid scale ceiling (tightened from 20° fine-scale LTV spec to account for 20 m slope averaging)",
-      "guven": "VARSAYIM"
+      "deger": 20,
+      "kaynak": "NASA xEVA System ConOps EVA-EXP-0042 Rev B (20° slope traverse limit; ISECG 2018)",
+      "guven": "tasarim_degeri (Ay)"
     },
     "uyari_egim_derece": {
-      "deger": 11.25,
-      "kaynak": "Slope load factor 0.75 risk-onset threshold (11.25° on 15° ceiling)",
+      "deger": 15,
+      "kaynak": "HLS2 / 20 m scale warning threshold (15° on 20° ceiling)",
       "guven": "VARSAYIM"
     },
     "hiz_tablosu": {
@@ -127,9 +269,45 @@
           "egim_derece": 15,
           "hiz_km_sa": 2,
           "hiz_m_s": 0.556
+        },
+        {
+          "egim_derece": 20,
+          "hiz_km_sa": 1.2,
+          "hiz_m_s": 0.333
         }
       ],
-      "kaynak": "Mars Rover Demo v1 scenario speed curve by slope load (10 km/h at 0–3.75°, linear load reduction to 2 km/h at 15°; uncalibrated)",
+      "kaynak": "Mars Rover Demo v1 scenario speed curve extended to 20° xEVA slope limit (10 km/h at 0–3.75°, linear attenuation to 1.2 km/h at 20°; uncalibrated)",
+      "guven": "VARSAYIM"
+    },
+    "inis_hiz_tablosu": {
+      "deger": [
+        {
+          "egim_derece": 0,
+          "hiz_km_sa": 10,
+          "hiz_m_s": 2.778
+        },
+        {
+          "egim_derece": 5,
+          "hiz_km_sa": 9.5,
+          "hiz_m_s": 2.639
+        },
+        {
+          "egim_derece": 10,
+          "hiz_km_sa": 7.5,
+          "hiz_m_s": 2.083
+        },
+        {
+          "egim_derece": 15,
+          "hiz_km_sa": 5,
+          "hiz_m_s": 1.389
+        },
+        {
+          "egim_derece": 20,
+          "hiz_km_sa": 3,
+          "hiz_m_s": 0.833
+        }
+      ],
+      "kaynak": "Assumed crewed rover downhill speed curve (not power-limited by climb, governed by braking distance and pitch stability)",
       "guven": "VARSAYIM"
     },
     "azami_engel_m": {
@@ -162,6 +340,11 @@
       "kaynak": "NASA Lunar Terrain Vehicle (LTV) unpressurized walk-back max radial standoff from base (10 km)",
       "guven": "tasarim_degeri"
     },
+    "sefer_mesafe_m": {
+      "deger": 17000,
+      "kaynak": "mobilite_cagatay_2026-11-15.json → sefer_butcesi.aracli_insan.gunluk_menzil_m (17 km/day demo vehicle budget)",
+      "guven": "VARSAYIM"
+    },
     "enerji_profili": {
       "deger": {
         "profil_adi_en": "Mars Rover Demo v1 (demo vehicle profile)",
@@ -180,10 +363,15 @@
   },
   "rover": {
     "ad_en": "Uncrewed rover",
-    "aciklama_en": "Robotic scout traverse without human life-support time or walk-back constraints.",
+    "aciklama_en": "Robotic scout traverse on 5 m HiRISE grid; segmented by Perseverance's 412 m/sol single-sol record and 45.22 km cumulative odometer record.",
     "azami_egim_derece": {
-      "deger": 25,
-      "kaynak": "Scenario autonomous slope cap on 20 m CTX grid (uncalibrated conservative bound below 30° rocker-bogie static tilt)",
+      "deger": 30,
+      "kaynak": "MSL instrument host document (drive software limit) & ince/maliyet/rover_inis.json",
+      "guven": "tasarim_degeri"
+    },
+    "uyari_egim_derece": {
+      "deger": 20,
+      "kaynak": "Based on Perseverance crater-rim climb caution threshold (ince/maliyet/rover_inis.json)",
       "guven": "VARSAYIM"
     },
     "hiz_tablosu": {
@@ -207,14 +395,65 @@
           "egim_derece": 25,
           "hiz_km_sa": 0.03,
           "hiz_m_s": 0.008
+        },
+        {
+          "egim_derece": 30,
+          "hiz_km_sa": 0.02,
+          "hiz_m_s": 0.006
         }
       ],
-      "kaynak": "Scenario robotic speed curve anchored near Mars 2020 Perseverance ~0.15 km/h flat drive rate with assumed slope attenuation",
+      "kaynak": "Scenario robotic speed curve anchored to NASA Mars 2020 Perseverance 0.042 m/s (0.15 km/h) flat drive rate with assumed slope attenuation up to 30°",
       "guven": "VARSAYIM"
+    },
+    "inis_hiz_tablosu": {
+      "deger": [
+        {
+          "egim_derece": 0,
+          "hiz_km_sa": 0.15,
+          "hiz_m_s": 0.042
+        },
+        {
+          "egim_derece": 10,
+          "hiz_km_sa": 0.144,
+          "hiz_m_s": 0.04
+        },
+        {
+          "egim_derece": 20,
+          "hiz_km_sa": 0.108,
+          "hiz_m_s": 0.03
+        },
+        {
+          "egim_derece": 30,
+          "hiz_km_sa": 0.058,
+          "hiz_m_s": 0.016
+        }
+      ],
+      "kaynak": "Assumed robotic rover downhill speed curve (AutoNav slip and braking governed on descents)",
+      "guven": "VARSAYIM"
+    },
+    "sefer_mesafe_m": {
+      "deger": 412,
+      "kaynak": "NASA Perseverance blog (12 Oct 2026) single-sol autonomous drive record (412 m/sol)",
+      "guven": "olculmus"
+    },
+    "surus_gunu_ortalamasi_m": {
+      "deger": 83.1,
+      "kaynak": "Calculated from NASA MMGIS Perseverance traverse (M20_traverse.json): 554 driving sols, 46.05 km, sols 14-2022 (median 46.0 m, p75 135.6 m, p90 212.4 m)",
+      "guven": "olculmus"
+    },
+    "sol_basina_ortalama_m": {
+      "deger": 22.9,
+      "kaynak": "NASA Perseverance traverse average across all 2009 sols including non-driving science sols (46.05 km / 2009 sols)",
+      "guven": "olculmus"
+    },
+    "toplam_menzil_m": {
+      "deger": 45220,
+      "kaynak": "NASA Perseverance cumulative odometer record (45.22 km across Jezero)",
+      "guven": "olculmus"
     },
     "azami_engel_m": {
       "deger": 0.4,
-      "kaynak": "Scenario rocker-bogie obstacle height (not evaluated at 20 m CTX cell resolution)",
+      "kaynak": "Scenario rocker-bogie obstacle height (sub-grid boulders under ~1-2 m not resolved on 5 m HiRISE DTM)",
       "guven": "VARSAYIM"
     }
   }
