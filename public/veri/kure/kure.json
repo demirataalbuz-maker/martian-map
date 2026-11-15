@@ -1,0 +1,48 @@
+{
+ "insanli": {
+  "esikler": {
+   "yukseklik_tavan_m": 2000,
+   "yukseklik_kaynak": "NASA HLS2 2015 announcement",
+   "enlem_bandi": 50,
+   "enlem_kaynak": "NASA HLS2 2015 announcement"
+  },
+  "alan_orani": {
+   "uygun": 0.4841,
+   "yukseklik": 0.1683,
+   "enlem": 0.2106,
+   "toz": 0.1358,
+   "veri_yok": 0.0013
+  },
+  "jezero_kodu": 0
+ },
+ "robotik": {
+  "esikler": {
+   "yukseklik_tavan_m": 500,
+   "yukseklik_kaynak": "Mars 2020 landing constraints, https://marsnext.jpl.nasa.gov/scieng_eng.cfm",
+   "enlem_bandi": 30,
+   "enlem_kaynak": "Golombek et al. 2012 (MSL); Mars 2020 landing constraints"
+  },
+  "alan_orani": {
+   "uygun": 0.1822,
+   "yukseklik": 0.4397,
+   "enlem": 0.2871,
+   "toz": 0.0897,
+   "veri_yok": 0.0013
+  },
+  "jezero_kodu": 0
+ },
+ "kaynaklar_en": {
+  "yukseklik": "MGS MOLA MEGDR 16 pixels/degree (megt90n000eb), PDS Geosciences Node; Smith et al. 2001, JGR 106, 23689",
+  "termal_atalet": "TES nighttime thermal inertia, Putzig and Mellon 2007 (Icarus 191, 68), via ASU JMARS map server, resampled to 0.1 deg",
+  "albedo": "MGS TES bolometric albedo 7410 m, USGS Astrogeology (Christensen et al. 2001)",
+  "toz_olcutu": "Thermal inertia < 100 and albedo > 0.25 considered thick dust, not suitable (MSL Landing Site Engineering User's Guide v2)"
+ },
+ "guven_notu_en": "Global screening at ~6 km cells only: shows where landing is clearly ruled out by altitude, latitude or thick dust. It cannot judge slopes or rocks; those need local CTX/HiRISE data, which is why the detailed study area is Jezero.",
+ "karolar": {
+  "kure_yukseklik": "karolar/kure_yukseklik/{z}/{x}/{y}.png",
+  "kure_termal_atalet": "karolar/kure_termal_atalet/{z}/{x}/{y}.png",
+  "kure_albedo": "karolar/kure_albedo/{z}/{x}/{y}.png",
+  "kure_uygunluk_insanli": "karolar/kure_uygunluk_insanli/{z}/{x}/{y}.png",
+  "kure_uygunluk_robotik": "karolar/kure_uygunluk_robotik/{z}/{x}/{y}.png"
+ }
+}

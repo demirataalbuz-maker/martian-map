@@ -1,0 +1,16 @@
+{
+ "mars_yillari": [
+  28,
+  29,
+  30,
+  31,
+  32
+ ],
+ "jezero_firtina_sol_orani": 0.0021,
+ "gale_firtina_sol_orani": 0.0,
+ "kuresel_medyan": 0.0223,
+ "kuresel_p90": 0.0577,
+ "mars_yuzeyinin_yuzde_kaci_daha_az_firtinali": 18.0,
+ "kaynak_en": "Mars Dust Activity Database v1.1 (Battalio and Wang 2021, Icarus 354, 114059; Battalio et al. 2023), storm masks from MRO MARCI daily global maps, Mars Years 28-32; Zenodo doi:10.5281/zenodo.7480334 (CC BY 4.0)",
+ "guven_notu_en": "Fraction of observed sols on which a cell was inside a mapped dust storm (storms of roughly 10^5 km2 and larger). Polar-night and unobserved sols excluded. Five Mars years only; global dust events (e.g. MY 28) dominate some years."
+}

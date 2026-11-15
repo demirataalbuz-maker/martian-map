@@ -1,0 +1,24 @@
+{
+ "olcek_yuksekligi_m": 10782,
+ "gale": {
+  "mola_m": -4370,
+  "basinc_pa": 840.0,
+  "kolon_g_cm2": 22.6,
+  "doz_uGy_gun": 220
+ },
+ "jezero": {
+  "mola_m": -2636,
+  "basinc_pa": 715,
+  "kolon_g_cm2": 19.2,
+  "doz_tahmini_uGy_gun": 247.7,
+  "gale_e_gore_fark_yuzde": 12.6,
+  "mars_yuzeyinin_yuzde_kaci_daha_ince_kalkanli": 69.6
+ },
+ "kuresel_kolon_g_cm2": {
+  "medyan": 15.4,
+  "p5": 10.8,
+  "p95": 23.6
+ },
+ "kaynak_en": "Dose-pressure relation: Guo et al. (2018), Dependence of the Martian radiation environment on atmospheric depth, JGR Planets, arXiv:1712.06987 (0.222 uGy/day/Pa, ~220 uGy/day average at Gale, valid 700-950 Pa). Elevation: MGS MOLA MEGDR 16 ppd. Pressure from a hydrostatic atmosphere (scale height ~10.8 km) anchored to 840 Pa at Gale.",
+ "guven_notu_en": "Seasonal pressure changes Gale dose by up to ~25%; solar activity matters more than location. Dose is estimated only inside the measured pressure range; elsewhere only atmospheric column is shown. Planning context, not a dosimetry product."
+}
