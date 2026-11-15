@@ -31,6 +31,7 @@ import {
 import { makeGridGeo } from './grid';
 import { getLang, onLangChange, setLang, ui } from './i18n';
 import { initLayerPanel, type GlobeBaseId, type GlobeOverlayId } from './layers';
+import { loadPresets, type MissionPreset } from './presets';
 import { initRoute, type RouteController } from './route';
 import { attachScaleBar } from './scalebar';
 import { initStops } from './stops';
@@ -394,6 +395,138 @@ function initChromeControllers(onDrawerToggle: () => void): { openDrawer: () => 
   };
 }
 
+/**
+ * "★ Sample" preset menu: one-click demo missions grouped by traverser. Each entry
+ * shows the outcome observed when the preset was verified (GO / CAUTION / NO-GO) as
+ * a hint; the real outcome is always recomputed from the terrain when it is loaded.
+ */
+function initSampleMenu(): {
+  toggle: () => boolean;
+  setPresets: (presets: MissionPreset[], onPick: (preset: MissionPreset) => void) => void;
+} {
+  const btn = document.getElementById('top-sample') as HTMLButtonElement | null;
+  const host = document.getElementById('params-popover')?.parentElement ?? null;
+  let presets: MissionPreset[] = [];
+  let pick: ((preset: MissionPreset) => void) | null = null;
+  let menu: HTMLElement | null = null;
+
+  const groupTitle = (gezgin: string): string =>
+    gezgin === 'yuruyen_insan'
+      ? ui('Walking astronaut', 'Yürüyen astronot')
+      : gezgin === 'roverli_insan'
+        ? ui('Crewed rover', 'Mürettebatlı rover')
+        : gezgin === 'rover'
+          ? ui('Uncrewed rover · 5 m HiRISE', 'İnsansız rover · 5 m HiRISE')
+          : gezgin;
+
+  const close = (): void => {
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    btn?.setAttribute('aria-expanded', 'false');
+  };
+
+  const render = (): void => {
+    if (!menu) return;
+    menu.replaceChildren();
+    menu.setAttribute('aria-label', ui('Sample missions', 'Örnek görevler'));
+    const head = document.createElement('div');
+    head.className = 'sample-menu-head';
+    const title = document.createElement('strong');
+    title.textContent = ui('Sample missions', 'Örnek görevler');
+    const note = document.createElement('span');
+    note.textContent = ui(
+      'Outcomes are computed live from the terrain and limits; nothing is forced.',
+      'Sonuçlar arazi ve limitlerden canlı hesaplanır; hiçbiri zorlanmaz.',
+    );
+    head.append(title, note);
+    menu.append(head);
+
+    const order: string[] = [];
+    for (const p of presets) if (!order.includes(p.gezgin)) order.push(p.gezgin);
+    for (const gezgin of order) {
+      const group = document.createElement('div');
+      group.className = 'sample-menu-group';
+      group.setAttribute('role', 'group');
+      const label = document.createElement('div');
+      label.className = 'sample-menu-group-title';
+      label.textContent = groupTitle(gezgin);
+      group.append(label);
+      for (const p of presets.filter((x) => x.gezgin === gezgin)) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'sample-menu-item';
+        const badge = document.createElement('span');
+        badge.className = 'sample-menu-badge';
+        badge.dataset.decision = p.beklenen;
+        badge.textContent = p.beklenen;
+        const text = document.createElement('span');
+        text.className = 'sample-menu-text';
+        const name = document.createElement('span');
+        name.className = 'sample-menu-name';
+        name.textContent = ui(p.ad_en, p.ad_tr);
+        const desc = document.createElement('span');
+        desc.className = 'sample-menu-desc';
+        desc.textContent = ui(p.aciklama_en, p.aciklama_tr);
+        text.append(name, desc);
+        item.append(badge, text);
+        item.addEventListener('click', () => {
+          close();
+          pick?.(p);
+        });
+        group.append(item);
+      }
+      menu.append(group);
+    }
+  };
+
+  const ensureMenu = (): HTMLElement | null => {
+    if (menu || !host) return menu;
+    menu = document.createElement('div');
+    menu.id = 'sample-menu';
+    menu.className = 'sample-menu';
+    menu.setAttribute('role', 'dialog');
+    menu.hidden = true;
+    host.append(menu);
+    document.addEventListener('pointerdown', (e) => {
+      const target = e.target as Node | null;
+      if (!menu || menu.hidden || !target) return;
+      if (menu.contains(target) || btn?.contains(target)) return;
+      close();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+    });
+    onLangChange(render);
+    return menu;
+  };
+
+  return {
+    toggle() {
+      // No presets file: fall back to the single built-in sample mission.
+      if (presets.length === 0 || !pick) return false;
+      const node = ensureMenu();
+      if (!node) return false;
+      if (node.hidden) {
+        render();
+        node.hidden = false;
+        btn?.setAttribute('aria-expanded', 'true');
+      } else {
+        close();
+      }
+      return true;
+    },
+    setPresets(next, onPick) {
+      presets = next;
+      pick = onPick;
+      if (btn && next.length > 0) {
+        btn.setAttribute('aria-haspopup', 'dialog');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+      if (menu && !menu.hidden) render();
+    },
+  };
+}
+
 function readNum(obj: unknown, path: string[]): number | null {
   let cur: unknown = obj;
   for (const key of path) {
@@ -603,6 +736,8 @@ async function start(): Promise<void> {
   let routeRef: RouteController | null = null;
   const chrome = initChromeControllers(() => routeRef?.syncCollapsedAlert());
   clearFatalError();
+  const presetsPromise = loadPresets();
+  const sampleMenu = initSampleMenu();
 
   let jsonDone = 0;
   const totalJson = 9;
@@ -766,6 +901,7 @@ async function start(): Promise<void> {
           emptyPrompt: document.getElementById('empty-prompt'),
           missionDock: document.getElementById('mission-dock'),
           onOpenDrawer: chrome.openDrawer,
+          onSampleClick: () => sampleMenu.toggle(),
         },
       });
       routeRef = route;
@@ -916,6 +1052,17 @@ async function start(): Promise<void> {
 
         syncMapDecorations();
       };
+
+      // Demo mission presets: switch to the preset's scenario and traverser, then plan it.
+      const runPreset = (preset: MissionPreset): void => {
+        if (preset.senaryo === 'rover' && (!fineGrid || !fineGeo)) return;
+        switchScenario(preset.senaryo);
+        route.loadPreset(preset, () => selector.selectById(preset.gezgin));
+      };
+      void presetsPromise.then((presets) => sampleMenu.setPresets(presets, runPreset));
+      if (import.meta.env.DEV) {
+        (window as unknown as Record<string, unknown>).__marswalk = { runPreset, summary: () => route.getLastSummary() };
+      }
 
       beaconBtn.addEventListener('click', () => enterLocalView());
       btnGlobe?.addEventListener('click', openGlobeView);

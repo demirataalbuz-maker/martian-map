@@ -23,6 +23,7 @@ import type { GroundMobilityModel, GridMeta, LandingCraftParams, LonLat, Science
 import type { GridGeo } from './grid';
 import { formatStintStopLabel, onLangChange, stintUnitLabel, translateDecisionReason, traverserShortName, ui } from './i18n';
 import { computeDemoEnergy, formatDuration, renderComparison, renderResults, updateChartsCursor } from './results';
+import type { MissionPreset } from './presets';
 import { findWalkBackReference } from './traverser';
 import type {
   EscapeResult,
@@ -152,6 +153,15 @@ export interface RouteController {
   setGlobeMode(isGlobe: boolean): void;
   addPoint(lonLat: LonLat, name?: string): void;
   syncCollapsedAlert(): void;
+  /**
+   * Loads a demo mission preset (stops + mission options) and plans it. If terrain
+   * data is still loading (e.g. right after a scenario switch) it runs once ready.
+   * `beforeRequest` runs after the old route is cleared and before the new one is
+   * requested; the caller uses it to select the preset's traverser.
+   */
+  loadPreset(preset: MissionPreset, beforeRequest?: () => void): void;
+  /** Compact summary of the last planned route (decision + key numbers), or null. */
+  getLastSummary(): { decision: string; reasons: string[]; distance_m: number; time_s: number } | null;
 }
 
 export interface RouteOptions {
@@ -172,6 +182,8 @@ export interface RouteOptions {
     emptyPrompt: HTMLElement | null;
     missionDock: HTMLElement | null;
     onOpenDrawer?: () => void;
+    /** Return true to handle the top "★ Sample" click yourself (e.g. open the preset menu). */
+    onSampleClick?: () => boolean;
   };
 }
 
@@ -265,6 +277,7 @@ export function initRoute(
   let ready = false;
   let startupDone = false;
   let pendingSampleMission = false;
+  let pendingPreset: { preset: MissionPreset; beforeRequest?: () => void } | null = null;
   let elevationRequestedOnce = false;
   let requestId = 0;
   let compareRequestId = 0;
@@ -1582,7 +1595,11 @@ export function initRoute(
       mode = hasLandingGrid ? 'auto-landing' : 'manual';
       syncModeButtons();
       showMessage('');
-      if (pendingSampleMission) {
+      if (pendingPreset) {
+        const queued = pendingPreset;
+        pendingPreset = null;
+        applyPreset(queued.preset, queued.beforeRequest);
+      } else if (pendingSampleMission) {
         pendingSampleMission = false;
         triggerSampleMission();
       } else {
@@ -1913,6 +1930,46 @@ export function initRoute(
     requestRoute();
   };
 
+  const applyPreset = (preset: MissionPreset, beforeRequest?: () => void): void => {
+    pendingSampleMission = false;
+    if (!ready) {
+      pendingPreset = { preset, beforeRequest };
+      showMessage(
+        ui(
+          'Terrain data is still loading; the sample mission will open automatically once ready.',
+          'Arazi verisi yükleniyor; hazır olduğunda örnek görev otomatik açılacak.',
+        ),
+        'info',
+      );
+      return;
+    }
+    pendingPreset = null;
+    waypoints.length = 0;
+    names.length = 0;
+    chosenLandingCell = null;
+    lastActionWasAdd = false;
+    pendingNotice = '';
+    roundTripInput.checked = preset.gidis_donus;
+    if (optimizeStopsInput) optimizeStopsInput.checked = preset.sira_optimize;
+    stopMinInput.value = String(preset.durak_calisma_dk);
+    allowNoDataInput.checked = preset.verisiz_gecis;
+    // Traverser switch happens here, while there are no waypoints, so it does not
+    // trigger a wasted route computation for the previous mission.
+    beforeRequest?.();
+    mode = hasLandingGrid && preset.baslangic !== 'manual' ? 'auto-landing' : 'manual';
+    syncModeButtons();
+    for (const stop of preset.duraklar) {
+      const cell = activeGeo.lonLatToIndex(stop.konum[0], stop.konum[1]);
+      if (cell !== null && waypoints[waypoints.length - 1] !== cell) {
+        waypoints.push(cell);
+        names.push(stop.ad_en ?? null);
+      }
+    }
+    invalidateComparison();
+    fitToResultOnce = true;
+    requestRoute();
+  };
+
   const triggerUndo = (): void => {
     if (waypoints.length === 0) return;
     waypoints.pop();
@@ -1926,6 +1983,7 @@ export function initRoute(
 
   const triggerClear = (): void => {
     pendingSampleMission = false;
+    pendingPreset = null;
     if (waypoints.length === 0) return;
     waypoints.length = 0;
     names.length = 0;
@@ -1937,7 +1995,11 @@ export function initRoute(
   };
 
   sampleButton.addEventListener('click', triggerSampleMission);
-  topSampleBtn?.addEventListener('click', triggerSampleMission);
+  topSampleBtn?.addEventListener('click', () => {
+    // When a preset menu is available the top button opens it instead of the single built-in sample.
+    if (options.topControls?.onSampleClick?.()) return;
+    triggerSampleMission();
+  });
   undoButton.addEventListener('click', triggerUndo);
   topUndoBtn?.addEventListener('click', triggerUndo);
   clearButton.addEventListener('click', triggerClear);
@@ -2126,6 +2188,16 @@ export function initRoute(
   return {
     addPoint,
     syncCollapsedAlert,
+    loadPreset: applyPreset,
+    getLastSummary() {
+      if (!lastResult) return null;
+      return {
+        decision: lastResult.decision,
+        reasons: [...lastResult.decisionReasons],
+        distance_m: lastResult.distance_m,
+        time_s: lastResult.time_s,
+      };
+    },
     setGlobeMode(isGlobe: boolean) {
       if (globeMode === isGlobe) return;
       globeMode = isGlobe;

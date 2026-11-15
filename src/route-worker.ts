@@ -1855,20 +1855,28 @@ function evaluateDecision(params: {
   if (params.marginalLanding) {
     cautionReasons.push('marginal (class 1) landing site');
   }
+  // Dataset-level assumptions apply to every route on a grid, so they are reported as
+  // notes next to the decision but do not by themselves turn a route into CAUTION;
+  // otherwise GO could never appear and CAUTION would carry no route-specific meaning.
+  const datasetNotes: string[] = [];
   if (!params.hasRockData && !params.hasThermalInertiaData) {
-    cautionReasons.push('rock and thermal inertia data not available (assumed)');
+    datasetNotes.push('rock and thermal inertia data not available (assumed)');
   } else if (!params.hasRockData) {
-    cautionReasons.push('sub-grid rock data not resolved at grid scale (assumed)');
+    datasetNotes.push('sub-grid rock data not resolved at grid scale (assumed)');
   } else if (!params.hasThermalInertiaData) {
-    cautionReasons.push('thermal inertia not resolved at grid scale (assumed)');
+    datasetNotes.push('thermal inertia not resolved at grid scale (assumed)');
   } else if (params.assumedTerrainData) {
-    cautionReasons.push('rock and thermal inertia data not available (assumed)');
+    datasetNotes.push('rock and thermal inertia data not available (assumed)');
   }
 
   if (cautionReasons.length > 0) {
-    return { brokenConditions, decision: 'CAUTION', decisionReasons: cautionReasons };
+    return { brokenConditions, decision: 'CAUTION', decisionReasons: [...cautionReasons, ...datasetNotes] };
   }
-  return { brokenConditions, decision: 'GO', decisionReasons: ['all evaluated corridor checks passed'] };
+  return {
+    brokenConditions,
+    decision: 'GO',
+    decisionReasons: ['all evaluated corridor checks passed', ...datasetNotes],
+  };
 }
 
 interface EnvelopeEvaluation {

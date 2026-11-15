@@ -1,0 +1,232 @@
+{
+  "not_en": "Demo mission presets for the Sample menu. Only stop coordinates and mission options are stored; outcomes are computed live from the real terrain grids and limits. 'beklenen' records the outcome observed when each preset was verified on 2026-11-15 and is shown as a hint only.",
+  "gorevler": [
+    {
+      "id": "yaya_go",
+      "ad_en": "Delta-front EVA",
+      "ad_tr": "Delta önü EVA'sı",
+      "aciklama_en": "Three Forks and Belva bench on foot: 5.4 km round trip in one EVA, well inside every limit.",
+      "aciklama_tr": "Three Forks ve Belva'ya yürüyerek: tek EVA'da 5,4 km gidiş-dönüş, tüm limitlerin rahat içinde.",
+      "senaryo": "crewed",
+      "gezgin": "yuruyen_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.381, 18.474], "ad_en": "Belva crater southern bench" }
+      ],
+      "beklenen": "GO"
+    },
+    {
+      "id": "yaya_caution_kum",
+      "ad_en": "Loose-ground crossing",
+      "ad_tr": "Gevşek zemin geçişi",
+      "aciklama_en": "A short EVA whose only path crosses caution-class sand / loose ground.",
+      "aciklama_tr": "Tek yolu dikkat sınıfı kum / gevşek zeminden geçen kısa bir EVA.",
+      "senaryo": "crewed",
+      "gezgin": "yuruyen_insan",
+      "duraklar": [{ "konum": [77.33, 18.47], "ad_en": "Western delta sand patch" }],
+      "beklenen": "CAUTION"
+    },
+    {
+      "id": "yaya_iki_eva",
+      "ad_en": "Two-EVA traverse to Neretva Vallis",
+      "ad_tr": "Neretva Vallis'e iki EVA'lık yürüyüş",
+      "aciklama_en": "14.6 km on foot: exceeds one 12.8 km EVA, so it is split into two EVAs and crosses caution terrain.",
+      "aciklama_tr": "Yürüyerek 14,6 km: tek EVA bütçesini (12,8 km) aşar, iki EVA'ya bölünür ve dikkat arazisinden geçer.",
+      "senaryo": "crewed",
+      "gezgin": "yuruyen_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.305, 18.51], "ad_en": "Neretva Vallis channel floor" }
+      ],
+      "beklenen": "CAUTION"
+    },
+    {
+      "id": "yaya_nogo_mesafe",
+      "ad_en": "Too far on foot: Nili Planum",
+      "ad_tr": "Yürüyerek fazla uzak: Nili Planum",
+      "aciklama_en": "The Nili Planum terrace is about 16 km out, beyond the 10 km walk-back ceiling.",
+      "aciklama_tr": "Nili Planum terası yaklaşık 16 km uzakta; 10 km'lik geri yürüme tavanını aşar.",
+      "senaryo": "crewed",
+      "gezgin": "yuruyen_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.12, 18.52], "ad_en": "Nili Planum western terrace (regional CTX)" }
+      ],
+      "beklenen": "NO-GO",
+      "bozulan": "distance"
+    },
+    {
+      "id": "rover_go",
+      "ad_en": "Delta-front drive",
+      "ad_tr": "Delta önü sürüşü",
+      "aciklama_en": "The same two stops by crewed rover: about 40 minutes, battery and walk-back margins comfortable.",
+      "aciklama_tr": "Aynı iki durak mürettebatlı rover ile: yaklaşık 40 dakika, batarya ve geri yürüme payı rahat.",
+      "senaryo": "crewed",
+      "gezgin": "roverli_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.381, 18.474], "ad_en": "Belva crater southern bench" }
+      ],
+      "beklenen": "GO"
+    },
+    {
+      "id": "rover_sira_optimize",
+      "ad_en": "Four stops, optimized order",
+      "ad_tr": "Dört durak, optimize sıra",
+      "aciklama_en": "Stops are given in a poor order; the optimizer reorders them and reports the time saved.",
+      "aciklama_tr": "Duraklar kötü bir sırayla verilir; optimizasyon sırayı değiştirir ve kazanılan süreyi yazar.",
+      "senaryo": "crewed",
+      "gezgin": "roverli_insan",
+      "sira_optimize": true,
+      "duraklar": [
+        { "konum": [77.381, 18.474], "ad_en": "Belva crater southern bench" },
+        { "konum": [77.4509, 18.4446], "ad_en": "Octavia E. Butler Landing plain" },
+        { "konum": [77.369, 18.431], "ad_en": "Kodiak delta remnant bench" },
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" }
+      ],
+      "beklenen": "GO"
+    },
+    {
+      "id": "rover_caution_pay",
+      "ad_en": "Thin walk-back margin: Neretva Vallis",
+      "ad_tr": "Dar geri yürüme payı: Neretva Vallis",
+      "aciklama_en": "16 km round trip to the inlet valley: allowed, but the walk-back safety margin drops below 10%.",
+      "aciklama_tr": "Giriş vadisine 16 km gidiş-dönüş: izinli, ama geri yürüme güvenlik payı %10'un altına düşer.",
+      "senaryo": "crewed",
+      "gezgin": "roverli_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.305, 18.51], "ad_en": "Neretva Vallis channel floor" }
+      ],
+      "beklenen": "CAUTION"
+    },
+    {
+      "id": "rover_nogo_geri_yurume",
+      "ad_en": "Walk-back failure: west of Neretva",
+      "ad_tr": "Geri yürüme aşımı: Neretva'nın batısı",
+      "aciklama_en": "One-way drive up the inlet valley: if the rover fails there, the crew cannot walk back within suit life support.",
+      "aciklama_tr": "Giriş vadisinin içine tek yön sürüş: rover orada bozulursa mürettebat giysi yaşam desteği süresinde yürüyerek dönemez.",
+      "senaryo": "crewed",
+      "gezgin": "roverli_insan",
+      "gidis_donus": false,
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.29, 18.515], "ad_en": "Upper Neretva Vallis" }
+      ],
+      "beklenen": "NO-GO",
+      "bozulan": "time"
+    },
+    {
+      "id": "rover_nogo_enerji",
+      "ad_en": "Battery runs out: five-stop grand tour",
+      "ad_tr": "Batarya biter: beş duraklı büyük tur",
+      "aciklama_en": "A 26 km loop over five science stops drains the battery below its reserve floor.",
+      "aciklama_tr": "Beş bilim durağını gezen 26 km'lik tur bataryayı rezerv tabanının altına düşürür.",
+      "senaryo": "crewed",
+      "gezgin": "roverli_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.4509, 18.4446], "ad_en": "Octavia E. Butler Landing plain" },
+        { "konum": [77.305, 18.51], "ad_en": "Neretva Vallis channel floor" },
+        { "konum": [77.369, 18.431], "ad_en": "Kodiak delta remnant bench" },
+        { "konum": [77.381, 18.474], "ad_en": "Belva crater southern bench" }
+      ],
+      "beklenen": "NO-GO",
+      "bozulan": "energy"
+    },
+    {
+      "id": "rover_nogo_hepsi",
+      "ad_en": "Everything breaks: Nili Planum by rover",
+      "ad_tr": "Her şey aşılır: rover ile Nili Planum",
+      "aciklama_en": "The 16 km-out terrace breaks distance, walk-back time and battery at once.",
+      "aciklama_tr": "16 km uzaktaki teras mesafe, geri yürüme süresi ve bataryayı aynı anda aşar.",
+      "senaryo": "crewed",
+      "gezgin": "roverli_insan",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.12, 18.52], "ad_en": "Nili Planum western terrace (regional CTX)" }
+      ],
+      "beklenen": "NO-GO",
+      "bozulan": "time, distance, energy"
+    },
+    {
+      "id": "robot_go_tek_sol",
+      "ad_en": "Single-sol hop from the landing site",
+      "ad_tr": "İniş noktasından tek solluk kısa sürüş",
+      "aciklama_en": "About 290 m out and back from Octavia E. Butler Landing: fits inside one 412 m sol.",
+      "aciklama_tr": "Octavia E. Butler iniş noktasından yaklaşık 290 m gidiş-dönüş: tek 412 m'lik sola sığar.",
+      "senaryo": "rover",
+      "gezgin": "rover",
+      "baslangic": "manual",
+      "duraklar": [
+        { "konum": [77.4509, 18.4446], "ad_en": "Octavia E. Butler Landing plain" },
+        { "konum": [77.4535, 18.4446], "ad_en": "Crater-floor outcrop" }
+      ],
+      "beklenen": "GO"
+    },
+    {
+      "id": "robot_go_cok_sol",
+      "ad_en": "Ten-sol delta campaign",
+      "ad_tr": "On solluk delta seferi",
+      "aciklama_en": "Three Forks to Belva and back: 3.8 km split into 10 sols with a STOP marker for each.",
+      "aciklama_tr": "Three Forks'tan Belva'ya ve geri: 3,8 km, her biri STOP işaretli 10 sola bölünür.",
+      "senaryo": "rover",
+      "gezgin": "rover",
+      "duraklar": [
+        { "konum": [77.4015, 18.451], "ad_en": "Three Forks depot plain (delta base)" },
+        { "konum": [77.381, 18.474], "ad_en": "Belva crater southern bench" }
+      ],
+      "beklenen": "GO"
+    },
+    {
+      "id": "robot_caution_tehlike",
+      "ad_en": "Hazard-terrain crossing",
+      "ad_tr": "Tehlikeli arazi geçişi",
+      "aciklama_en": "A short drive north of Neretva Vallis whose target lies inside caution-class hazard terrain.",
+      "aciklama_tr": "Neretva Vallis'in kuzeyinde, hedefi dikkat sınıfı tehlikeli arazinin içinde olan kısa bir sürüş.",
+      "senaryo": "rover",
+      "gezgin": "rover",
+      "baslangic": "manual",
+      "duraklar": [
+        { "konum": [77.3111, 18.5728], "ad_en": "Start: firm ground" },
+        { "konum": [77.30665, 18.5728], "ad_en": "Hazard-terrain target" }
+      ],
+      "beklenen": "CAUTION"
+    },
+    {
+      "id": "robot_nogo_menzil",
+      "ad_en": "Beyond total range: crater-floor circuit",
+      "ad_tr": "Toplam menzil aşımı: krater tabanı turu",
+      "aciklama_en": "A 48 km circuit of the mapped crater floor exceeds the 45.22 km lifetime range record.",
+      "aciklama_tr": "Haritalanan krater tabanında 48 km'lik tur, 45,22 km'lik toplam menzil rekorunu aşar.",
+      "senaryo": "rover",
+      "gezgin": "rover",
+      "baslangic": "manual",
+      "duraklar": [
+        { "konum": [77.33707, 18.56503], "ad_en": "Northwest floor" },
+        { "konum": [77.5477, 18.56352], "ad_en": "Northeast floor" },
+        { "konum": [77.4509, 18.4446], "ad_en": "Octavia E. Butler Landing plain" },
+        { "konum": [77.54805, 18.39481], "ad_en": "Southeast floor" },
+        { "konum": [77.34277, 18.42012], "ad_en": "Southwest floor" }
+      ],
+      "beklenen": "NO-GO",
+      "bozulan": "distance"
+    },
+    {
+      "id": "robot_engelli_hedef",
+      "ad_en": "Blocked target: forbidden terrain",
+      "ad_tr": "Engelli hedef: yasak arazi",
+      "aciklama_en": "The target sits on forbidden-class terrain, so the planner refuses to route to it and says why.",
+      "aciklama_tr": "Hedef yasak sınıf arazide; planlayıcı rota çizmeyi reddeder ve nedenini söyler.",
+      "senaryo": "rover",
+      "gezgin": "rover",
+      "baslangic": "manual",
+      "duraklar": [
+        { "konum": [77.4125, 18.43817], "ad_en": "Start: firm ground" },
+        { "konum": [77.40894, 18.43817], "ad_en": "Forbidden-terrain target" }
+      ],
+      "beklenen": "NO-GO",
+      "bozulan": "forbidden terrain (no route)"
+    }
+  ]
+}
