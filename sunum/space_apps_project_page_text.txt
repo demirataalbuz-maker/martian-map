@@ -1,0 +1,86 @@
+SPACE APPS PROJECT PAGE TEXT - copy each section into its box
+(If a box does not support bold, delete the ** marks.)
+
+==================================================
+PROJECT NAME
+==================================================
+Marswalk Map
+
+==================================================
+HIGH-LEVEL SUMMARY
+==================================================
+Marswalk Map is a web globe and route planner for landing and moving safely on Mars. The user picks a crewed or a robotic mission. The globe first screens the whole planet with NASA elevation, thermal inertia, albedo, radiation shielding and dust storm data, and shows why Jezero crater is a good, data-rich study site. Inside Jezero, the tool shows where the chosen lander can touch down, suggests the nearest suitable landing site for a clicked science target, and plans the fastest safe route for a suited astronaut, a crewed rover or a robotic rover. Every point of the route is checked against life support, walk-back, energy and distance limits, and the result is a clear GO / CAUTION / NO-GO decision. Every limit is traced to a NASA or mission source.
+
+==================================================
+LINK TO PROJECT DEMO
+==================================================
+[Google Drive link of Marswalk_Map_Demo_7_slides.pdf - sharing: anyone with the link can view]
+
+==================================================
+LINK TO FINAL PROJECT
+==================================================
+https://demirataalbuz-maker.github.io/martian-map/
+Source code (Apache 2.0): https://github.com/demirataalbuz-maker/martian-map
+
+==================================================
+DETAILED DESCRIPTION
+==================================================
+**What it does.** Marswalk Map answers two questions a Mars mission must solve before anyone steps out: where can we land, and how far can we safely go from there?
+
+1. **Globe screening.** We dressed the whole of Mars with MOLA elevation, TES thermal inertia and TES albedo. A landing screen combines elevation, latitude and the thick-dust test (thermal inertia below 100 and albedo above 0.25). It leaves about 48% of the surface open for a crewed lander (below +2 km, within ±50°) and 18% for a robotic lander (below +0.5 km, within ±30°). We also show atmospheric shielding from radiation, based on the dose and pressure relation measured by Curiosity's RAD, and dust storm frequency from five Mars years of MRO MARCI storm maps. Jezero passes every test: about 70% of Mars has a thinner air shield, and 82% is stormier. Jezero also has the most ready-made terrain data, so it is our study area.
+2. **Two scales.** The crewed scenario uses an 86 × 107 km area at 20 m, built from 64 USGS CTX terrain models. The robotic scenario uses the USGS 1 m HiRISE terrain model of the delta area (about 20 × 21 km), sampled at 5 m, because a remotely driven rover needs fine detail.
+3. **Landing maps.** For each cell, the steepest slope inside the lander's safe circle decides suitable, marginal or not landable. Sand dunes and ripples from the USGS geologic map are marked as hazards.
+4. **Routes.** A* finds the fastest route over a cost grid where slope, ground and vehicle limits set the speed. At every point we check four things: the astronaut could still walk back if the vehicle fails (6.4 h of an 8 h suit), the battery can still bring the vehicle home with a 20% reserve, the base is no more than 10 km away, and the total mission time stays inside the suit time budget. Where a check fails, the failing part is drawn in dashed red with a "!" marker and the reason. Long routes are split into EVAs or sols, with a STOP marker at the end of each.
+5. **Honest data.** Each layer shows its source and its known limits. CTX terrain resolves features of about 75–80 m (we measured this against HiRISE), so boulders are not seen. Suit and vehicle limits come from NASA lunar requirements, because no official crewed Mars rover limits exist.
+
+**How we built it.** We used only ready-made NASA and USGS products; we did not process raw stereo images. We blended the 64 CTX terrain models with NASA Ames Stereo Pipeline. We corrected each model's vertical offset with USGS quality files and found and fixed a 32–85 m horizontal shift by matching each model's own orthoimage. Checked against HiRISE, the remaining shift is 0–12 m. Processing used GDAL, QGIS, Python, NumPy and SciPy. The site runs fully in the browser: TypeScript, Vite, MapLibre GL, with routing in a Web Worker and no server.
+
+**Why it matters.** Landing site and traverse planning are usually separate studies. Marswalk Map puts them in one view, for both crewed and robotic missions, with sources a reviewer can check.
+
+==================================================
+USE OF SUPER INTELLIGENCE (SI)
+(confirm the tool list with the team before submitting)
+==================================================
+The project idea and all decisions are the team's. AI tools were used as assistants: Claude Code (Anthropic) for data processing scripts, source checking and drafting text; Claude, ChatGPT and Codex (OpenAI), Gemini and Antigravity (Google) for application code, literature search and documentation drafts. All outputs were reviewed and checked by the team. AI-assisted code is marked in source file headers. No AI-generated imagery is presented as Mars data.
+
+==================================================
+NASA DATA
+==================================================
+- MGS MOLA MEGDR elevation, 16 pixels/degree (NASA PDS Geosciences Node)
+- MGS TES bolometric albedo, 7410 m (USGS Astrogeology)
+- TES nighttime thermal inertia (Putzig and Mellon 2007, ASU JMARS)
+- MRO CTX stereo terrain models, 64 DTMs at 20 m, and orthoimages (USGS Astrogeology)
+- Mars 2020 Terrain Relative Navigation products: CTX DTM mosaic, CTX orthomosaic 6 m, HiRISE DTM 1 m (USGS Astrogeology / NASA)
+- Mars Odyssey THEMIS quantitative thermal inertia, 100 m (USGS Astrogeology)
+- MRO MARCI-based Mars Dust Activity Database v1.1 (Battalio and Wang 2021), CC BY 4.0
+- MSL RAD radiation results (Guo et al. 2018; Ehresmann et al. 2021)
+- Mars 2020 Perseverance traverse and waypoints (NASA/JPL MMGIS)
+- Mars Viking Colorized Global Mosaic 232 m, MDIM 2.1 (USGS / NASA Ames)
+- NASA engineering documents: Human Landing Site Workshop 2015, xEVA System ConOps, MSL and Mars 2020 landing constraints
+
+==================================================
+SPACE AGENCY PARTNER DATA AND OTHER REFERENCES
+==================================================
+Data and papers:
+- Dickson et al. (2024), Global CTX Mosaic of Mars, Earth and Space Science, doi:10.1029/2024EA003555; Murray Lab CTX Mosaic V01, credit NASA/JPL/MSSS/The Murray Lab
+- Sun and Stack (2020), Geologic map of Jezero crater and the Nili Planum region, USGS SIM 3464, doi:10.3133/sim3464
+- Smith et al. (2001), doi:10.1029/2000JE001364 (MOLA)
+- Christensen et al. (2001), doi:10.1029/2000JE001370 (TES)
+- Putzig and Mellon (2007), doi:10.1016/j.icarus.2007.05.013
+- Fergason, Christensen and Kieffer (2006), doi:10.1029/2006JE002735 (THEMIS thermal inertia)
+- Battalio and Wang (2021), doi:10.1016/j.icarus.2020.114059; data doi:10.5281/zenodo.7480334
+- Guo et al. (2018), doi:10.1002/2016JE005206
+- Ehresmann et al. (2021), doi:10.1029/2021JE006851
+- Golombek et al. (2012), doi:10.1007/s11214-012-9916-y
+- Golombek et al. (2015), LPSC 46, abstract 1653
+- Steltzner et al., MSL EDL engineering constraints (MSL landing site workshop)
+- Metzger et al., plume effects, arXiv:2104.06248
+- Sabahi et al. (2025), ICES-2025-294
+- NASA NSSDC, Apollo Lunar Roving Vehicle
+- Emran et al. (2021), arXiv:2109.05711
+- Zakšek et al. (2011), doi:10.3390/rs3020398
+- Horn (1981), doi:10.1109/PROC.1981.11918
+- Beyer et al. (2018), Ames Stereo Pipeline, doi:10.1029/2018EA000409
+
+Software: GDAL, QGIS, NumPy, SciPy, NASA Ames Stereo Pipeline, MapLibre GL JS 6.18 (BSD-3-Clause), Vite (MIT), TypeScript (Apache 2.0).
+Full list with links: REFERENCES.md in the GitHub repository.
